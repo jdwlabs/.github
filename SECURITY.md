@@ -4,7 +4,7 @@
 
 Do **not** open a public issue for security vulnerabilities.
 
-Report vulnerabilities privately via GitHub's [security advisory feature](https://github.com/jdwlabs/.github/security/advisories/new) or by emailing [jdwillmsen@gmail.com](mailto:jdwillmsen@gmail.com).
+Report vulnerabilities privately via GitHub's [security advisory feature](https://github.com/jdwlabs/.github/security/advisories/new) or by emailing [jdwlabs00@gmail.com](mailto:jdwlabs00@gmail.com).
 
 Include:
 - Description of the vulnerability

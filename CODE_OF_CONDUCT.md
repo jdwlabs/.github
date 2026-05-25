@@ -15,6 +15,6 @@
 
 ## Enforcement
 
-Violations can be reported to [jdwillmsen@gmail.com](mailto:jdwillmsen@gmail.com). All reports will be reviewed and responded to. Maintainers have the right to remove, edit, or reject contributions that violate this code.
+Violations can be reported to [jdwlabs00@gmail.com](mailto:jdwlabs00@gmail.com). All reports will be reviewed and responded to. Maintainers have the right to remove, edit, or reject contributions that violate this code.
 
 This code of conduct applies to all project spaces and any individual representing this org in public spaces.
