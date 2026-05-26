@@ -1,5 +1,7 @@
 # .github
 
+[![License](https://img.shields.io/badge/License-PolyForm%20NonCommercial%201.0-blue)](https://polyformproject.org/licenses/noncommercial/1.0.0/)
+
 Default community health files for the [jdwlabs](https://github.com/jdwlabs) organization. GitHub applies these as org-wide fallbacks to any repo that doesn't define its own.
 
 ## Contents
