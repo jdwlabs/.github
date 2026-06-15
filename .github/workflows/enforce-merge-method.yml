@@ -1,0 +1,61 @@
+name: Enforce rebase-only merge
+
+# GitHub has no org-level "default merge method for new repos" setting and
+# merge-method toggles are not a ruleset property, so new repos start with all
+# three methods enabled. This workflow enforces the org standard (rebase-only:
+# rebase enabled, squash + merge-commit disabled) across every non-archived
+# repo, correcting drift and catching newly created repos on the next run.
+#
+# Requires an org secret ORG_ADMIN_TOKEN with repository administration
+# write access (fine-grained PAT: "Administration" read/write on all repos, or
+# a GitHub App installation token). The default GITHUB_TOKEN cannot modify
+# settings on other repositories.
+
+on:
+  schedule:
+    - cron: "0 7 * * *" # daily 07:00 UTC
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Report changes without applying"
+        type: boolean
+        default: false
+
+permissions: {}
+
+concurrency:
+  group: enforce-merge-method
+  cancel-in-progress: true
+
+jobs:
+  enforce:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.ORG_ADMIN_TOKEN }}
+      ORG: ${{ github.repository_owner }}
+      DRY_RUN: ${{ inputs.dry_run }}
+    steps:
+      - name: Apply rebase-only to all non-archived repos
+        run: |
+          set -euo pipefail
+          gh api "orgs/${ORG}/repos?per_page=100" --paginate \
+            --jq '.[] | select(.archived == false) | .name' \
+          | while read -r repo; do
+              read -r squash merge rebase < <(
+                gh api "repos/${ORG}/${repo}" \
+                  --jq '[.allow_squash_merge, .allow_merge_commit, .allow_rebase_merge] | @tsv'
+              )
+              if [ "$squash" = "false" ] && [ "$merge" = "false" ] && [ "$rebase" = "true" ]; then
+                echo "ok    ${repo} (already rebase-only)"
+                continue
+              fi
+              echo "drift ${repo} (squash=$squash merge=$merge rebase=$rebase)"
+              if [ "${DRY_RUN}" = "true" ]; then
+                continue
+              fi
+              gh api -X PATCH "repos/${ORG}/${repo}" \
+                -F allow_rebase_merge=true \
+                -F allow_squash_merge=false \
+                -F allow_merge_commit=false >/dev/null
+              echo "fixed ${repo}"
+            done
