@@ -145,6 +145,47 @@ jobs:
 
 ---
 
+## `security-scan.yml` — Security Scan (Trivy + SARIF)
+
+Runs Trivy in filesystem mode (SCA + IaC/Dockerfile misconfig + secrets) and
+uploads results as SARIF to the calling repo's Security tab. See
+`docs/code-scanning-strategy.md` for the tooling evaluation behind this
+choice.
+
+**Trigger:** any (typically `pull_request` + `push: main`)
+
+**Inputs:**
+
+| Input | Required | Default | Description |
+|---|---|---|---|
+| `scan-path` | No | `.` | Repo-relative path to scan |
+| `severity` | No | `CRITICAL,HIGH` | Comma-separated severities Trivy reports |
+| `fail-on-findings` | No | `false` | Fail the job on findings at/above `severity`. SARIF uploads regardless. |
+
+**Example caller:**
+
+```yaml
+# .github/workflows/security-scan.yml
+name: Security Scan
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  scan:
+    uses: jdwlabs/.github/.github/workflows/security-scan.yml@main
+```
+
+**Used by:** `apps` (PoC, JDWLABS-71)
+
+---
+
 ## Tag Convention
 
 | Repo type | Tag format | Example |

@@ -1,0 +1,51 @@
+name: Security Scan
+
+on:
+  workflow_call:
+    inputs:
+      scan-path:
+        description: Path to scan (repo-relative)
+        type: string
+        default: '.'
+      severity:
+        description: Comma-separated severities that fail the job
+        type: string
+        default: 'CRITICAL,HIGH'
+      fail-on-findings:
+        description: Fail the job when findings at or above `severity` exist. SARIF still uploads either way.
+        type: boolean
+        default: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v6.0.3
+
+      # Trivy in filesystem mode covers SCA (lockfiles: go.mod, package.json,
+      # gradle), IaC misconfig (Terraform, Helm, Kubernetes manifests),
+      # Dockerfile misconfig, and secrets in one pass — one tool instead of
+      # stitching together Trivy+Checkov+hadolint+gitleaks separately. Cross-
+      # checked against GitHub's native secret-scanning/push-protection
+      # (already on for public repos), which stays the primary secret gate;
+      # this is defense in depth, not a replacement.
+      - name: Run Trivy
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: ${{ inputs.scan-path }}
+          scanners: vuln,misconfig,secret
+          format: sarif
+          output: trivy-results.sarif
+          severity: ${{ inputs.severity }}
+          exit-code: ${{ inputs.fail-on-findings && '1' || '0' }}
+
+      - name: Upload SARIF to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy
