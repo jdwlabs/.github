@@ -53,7 +53,7 @@ chore/upgrade-nx-20
 Org-wide standards live in [docs/code-standards.md](docs/code-standards.md) — the contract per-repo linters and CI implement. Each repo enforces its own linting and formatting. Run the relevant checks before opening a PR:
 
 - **apps**: `npx nx lint <project>` · `npx nx test <project>`
-- **platform**: Helm `ct lint` via CI
+- **platform**: `helm lint` + kubeconform via CI
 - **infrastructure**: `terraform fmt` · `terraform validate`
 - **deployments**: `helm lint` via CI
 

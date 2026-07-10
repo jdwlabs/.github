@@ -1,6 +1,6 @@
 # jdwlabs Code Standards
 
-The org-wide contract for code quality. Per-repo linters and CI implement it mechanically; PR review covers the judgment calls tools can't. If a rule here conflicts with a repo's committed lint config, the lint config wins for that repo — then fix this doc or the config so they agree.
+The org-wide contract for code quality. Per-repo linters and CI implement it mechanically; PR review covers the judgment calls tools can't. If a rule here conflicts with a repo's committed lint config on a style specific, the lint config wins for that repo — then fix this doc or the config so they agree. Missing enforcement (a required check a repo doesn't run yet) is a gap to ticket, never an exemption.
 
 How this is enforced (standard GitHub layering):
 
@@ -29,11 +29,11 @@ How this is enforced (standard GitHub layering):
 - `main` is a merge target only — everything lands via PR with green CI. No direct pushes.
 - Linear history preferred; repos declare their merge strategy (apps: rebase-only).
 - PRs: one concern, template filled, linked ticket where one exists, every review thread and bot/security finding fixed or explicitly justified before merge.
-- Signed commits verified on GitHub (noreply email UID).
+- Commits signed and verified on GitHub (noreply email UID). History backfills in progress do not exempt new commits.
 
 ## 3. Go (`platformctl`, `talops`, backend services)
 
-- `gofmt` + `goimports` clean; repo `.golangci.yml` is the lint contract and runs in CI.
+- `gofmt` + `goimports` clean; repo `.golangci.yml` is the lint contract and CI must run `golangci-lint run` as a required check.
 - `go test -race ./...` green — race detector always, not optionally.
 - Table-driven tests; fake clients (e.g. `k8s/fake.go` pattern) over mock frameworks; testdata fixtures for parsing/validation.
 - Errors wrapped with context: `fmt.Errorf("doing X: %w", err)`. No swallowed errors — handle, return, or log with reason.
@@ -52,7 +52,7 @@ How this is enforced (standard GitHub layering):
 
 ## 5. Helm / Kubernetes / YAML (`platform`, `deployments`)
 
-- `yamllint`, `helm lint`, `helm template | kubeconform` (with CRD schemas) all green in CI.
+- `yamllint`, `helm lint`, and `helm template | kubeconform` (with CRD schemas) must all run and pass in CI — rendering to /dev/null without schema validation does not count.
 - **Every workload sets resource requests and limits** — no BestEffort pods (a node roll OOM-killing unbounded pods is a learned incident, not a hypothetical).
 - **Probes required:** liveness + readiness always; `startupProbe` for slow-boot workloads (JVMs) so CPU-limit changes can't fail liveness during boot.
 - Security contexts: non-root, no privilege escalation, unless documented why.
@@ -62,7 +62,7 @@ How this is enforced (standard GitHub layering):
 
 ## 6. Terraform / Talos (`infrastructure`)
 
-- `terraform fmt -check` + `validate` in CI; providers version-pinned; `.terraform.lock.hcl` committed.
+- `terraform fmt -check` + `validate` in CI; providers must be version-pinned and `.terraform.lock.hcl` must be committed (not gitignored).
 - Remote, locked state backend — never local state on a workstation.
 - Repeated resources use modules/`for_each`, not duplicated files.
 - Applies are human-gated: agents plan, humans apply. Never autonomous `apply`/`destroy`.
@@ -83,3 +83,13 @@ How this is enforced (standard GitHub layering):
 ## 9. Definition of Done (org-wide)
 
 A change is Done when: deliverables verified with evidence; merged to `main` via green-CI PR; review threads and security findings resolved or justified; lint/format/test gates green; docs and runbooks updated where behavior changed; for GitOps changes, ArgoCD Synced + Healthy verified against the live cluster. The Jira workflow expands this per issue type.
+
+## 10. Improving This Document
+
+This is a living contract, not a monument.
+
+- **Feedback loop:** every incident, review finding, or retro that exposes a missing/wrong rule produces a PR here in the same week — with the evidence in the PR description, not in the doc.
+- **Requirements vs reality:** this doc states requirements. Where a repo doesn't yet comply, open a ticket for the gap; never soften the rule to match the gap. Known gaps at last audit (2026-07-10): platform CI doesn't run golangci-lint; deployments CI skips kubeconform; infrastructure gitignores the Terraform lockfile; apps commit-signing backfill in flight.
+- **Cadence:** re-audit this doc against the repos whenever a new repo or stack joins the org, and at least quarterly — a rule nobody has checked in a quarter is a rumor.
+- **Change process:** PR to `jdwlabs/.github`, one concern per change, rationale in the PR. Silence is agreement; objections belong on the PR, not in side channels.
+
