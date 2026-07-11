@@ -37,7 +37,11 @@ jobs:
       - name: Package chart
         run: |
           mkdir -p .cr-release-packages
+          # --dependency-update: without it, helm package silently packages a chart
+          # whose declared dependencies (e.g. file://-referenced library charts) are
+          # missing from charts/, producing a tgz that fails only at install time
           helm package ${{ inputs.charts-dir }}/${{ steps.tag.outputs.component }} \
+            --dependency-update \
             --version ${{ steps.tag.outputs.version }} \
             --destination .cr-release-packages/
 
