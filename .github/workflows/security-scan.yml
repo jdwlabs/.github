@@ -27,11 +27,10 @@ jobs:
 
       # Trivy in filesystem mode covers SCA (lockfiles: go.mod, package.json,
       # gradle), IaC misconfig (Terraform, Helm, Kubernetes manifests),
-      # Dockerfile misconfig, and secrets in one pass — one tool instead of
-      # stitching together Trivy+Checkov+hadolint+gitleaks separately. Cross-
-      # checked against GitHub's native secret-scanning/push-protection
-      # (already on for public repos), which stays the primary secret gate;
-      # this is defense in depth, not a replacement.
+      # Dockerfile misconfig, and secrets in one pass. This job is advisory by
+      # default (fail-on-findings gates it); the blocking secrets gate is the
+      # gitleaks job below, and GitHub's native secret-scanning/push-protection
+      # (on for public repos) remains the push-time defense.
       - name: Run Trivy
         uses: aquasecurity/trivy-action@v0.36.0
         with:
@@ -49,3 +48,43 @@ jobs:
         with:
           sarif_file: trivy-results.sarif
           category: trivy
+
+  # Blocking secrets gate: any leak fails the job, unlike the advisory Trivy
+  # job above. Rules and the value-pinned allowlist live in this repo's
+  # gitleaks.toml so the config is maintained in exactly one place.
+  gitleaks:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository under scan
+        uses: actions/checkout@v6.0.3
+        with:
+          path: repo
+
+      # Fetch the org config at the exact ref this reusable workflow is
+      # running from (job_workflow_sha), so workflow and config can never
+      # drift apart — including when a caller pins a non-main ref.
+      - name: Checkout org gitleaks config
+        uses: actions/checkout@v6.0.3
+        with:
+          repository: jdwlabs/.github
+          ref: ${{ github.job_workflow_sha }}
+          path: org-config
+
+      - name: Install gitleaks
+        run: |
+          curl -fsSL -o gitleaks.tar.gz \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf gitleaks.tar.gz gitleaks
+          sudo install gitleaks /usr/local/bin/gitleaks
+
+      - name: Run gitleaks (blocking)
+        run: |
+          gitleaks dir repo \
+            --config org-config/gitleaks.toml \
+            --redact \
+            --no-banner \
+            --exit-code 1
+          echo "gitleaks: 0 leaks found — secrets gate passed"

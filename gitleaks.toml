@@ -1,0 +1,23 @@
+# Org-wide gitleaks configuration, consumed by the security-scan reusable
+# workflow so every repo inherits the same secrets gate from one place.
+#
+# Allowlist policy: entries are pinned to the exact fake value they exempt —
+# never a whole path, file glob, or rule. A path/rule exemption could mask a
+# future real leak sitting next to a fixture; a value pin cannot.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Known-fake test fixtures in jdwlabs repos (value-pinned)"
+regexes = [
+  # jwt.io demo token (public example HMAC signature) used by the usersui
+  # dashboard component spec as a mock cookie value.
+  '''SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c''',
+  # usersrole JwtServiceTests fixture: base64 of
+  # "myttestsecretkeyforjsonwebtoken1234567890 -n".
+  '''bXl0dGVzdHNlY3JldGtleWZvcmpzb253d2VidG9rZW4xMjM0NTY3ODkwIC1uCg==''',
+  # Synthetic OpenSSH private key in the infrastructure discovery scanner
+  # tests; the key body base64-decodes to repeated "test" filler.
+  '''QyNTUxOQAAACB7S6V3L1V0cG1rY3Rmc3Rlc3R0ZXN0dGVzdHRlc3Q''',
+]
