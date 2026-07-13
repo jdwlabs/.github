@@ -158,20 +158,22 @@ Two jobs:
   choice.
 - **`gitleaks`** — blocking secrets gate. Runs gitleaks (pinned, checksum
   verified) over the checked-out tree with the org-wide config
-  (`gitleaks.toml` at this repo's root, fetched at the same ref as the
-  workflow). Any leak fails the job; zero findings passes with an explicit
-  message. Allowlist entries are value-pinned to known-fake fixtures — add
-  new exemptions there, never in caller repos.
+  (`gitleaks.toml` at this repo's root, fetched at the workflow's own commit
+  when the runner exposes it, else at `config-ref`). Any leak fails the job;
+  zero findings passes with an explicit message. Allowlist entries are
+  value-pinned to known-fake fixtures — add new exemptions there, never in
+  caller repos.
 
 **Trigger:** any (typically `pull_request` + `push: main`)
 
-**Inputs (Trivy job only; the gitleaks job takes no inputs):**
+**Inputs:**
 
 | Input | Required | Default | Description |
 |---|---|---|---|
-| `scan-path` | No | `.` | Repo-relative path to scan |
+| `scan-path` | No | `.` | Repo-relative path to scan (Trivy job) |
 | `severity` | No | `CRITICAL,HIGH` | Comma-separated severities Trivy reports |
-| `fail-on-findings` | No | `false` | Fail the job on findings at/above `severity`. SARIF uploads regardless. |
+| `fail-on-findings` | No | `false` | Fail the Trivy job on findings at/above `severity`. SARIF uploads regardless. |
+| `config-ref` | No | `main` | jdwlabs/.github ref for `gitleaks.toml` when the runner doesn't expose the workflow's own SHA. Only override when pinning the workflow itself to a non-main ref (e.g. pre-merge testing). |
 
 **Example caller:**
 
