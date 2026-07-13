@@ -1,0 +1,36 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": [
+    "Shared Renovate preset for all jdwlabs repositories — consumed as github>jdwlabs/.github.",
+    "Renovate is the single owner of dependency automation in this org; repository-level (UI) Dependabot should remain disabled so updates arrive through one reviewable pipeline.",
+    "Regular updates are batched weekly (non-major updates grouped into one PR per repo) to keep review load low; security/vulnerability fixes bypass the schedule and open immediately.",
+    "Branches are kept rebased on the base branch so PRs stay fast-forward-clean for rebase-only merging."
+  ],
+  "extends": [
+    "config:recommended",
+    ":semanticCommits",
+    ":semanticCommitTypeAll(chore)"
+  ],
+  "labels": ["dependencies"],
+  "schedule": ["before 8am on saturday"],
+  "prHourlyLimit": 0,
+  "prConcurrentLimit": 10,
+  "rebaseWhen": "behind-base-branch",
+  "dependencyDashboard": true,
+  "configMigration": true,
+  "packageRules": [
+    {
+      "description": "Batch all non-major updates into a single weekly PR per repo to keep noise reviewable",
+      "groupName": "all non-major dependencies",
+      "groupSlug": "all-minor-patch",
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest"]
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "schedule": ["at any time"],
+    "prCreation": "immediate",
+    "labels": ["dependencies", "security"]
+  },
+  "osvVulnerabilityAlerts": true
+}

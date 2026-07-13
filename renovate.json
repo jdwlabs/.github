@@ -1,0 +1,8 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": [
+    "Renovate config for the .github meta repo itself (reusable workflow action pins).",
+    "Org-wide defaults live in default.json and are consumed by other repos as github>jdwlabs/.github."
+  ],
+  "extends": ["github>jdwlabs/.github"]
+}
