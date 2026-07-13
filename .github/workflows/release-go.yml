@@ -11,6 +11,10 @@ on:
         description: Path to go.mod or go.work for Go version resolution
         type: string
         default: go.mod
+      workdir:
+        description: Working directory containing the Go module (monorepo subdirectory); goreleaser-config resolves relative to it
+        type: string
+        default: '.'
 
 jobs:
   release:
@@ -30,6 +34,7 @@ jobs:
       - uses: goreleaser/goreleaser-action@v7.2.2
         with:
           version: latest
+          workdir: ${{ inputs.workdir }}
           args: release --clean --config ${{ inputs.goreleaser-config }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
