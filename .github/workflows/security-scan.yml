@@ -15,6 +15,10 @@ on:
         description: Fail the job when findings at or above `severity` exist. SARIF still uploads either way.
         type: boolean
         default: false
+      config-ref:
+        description: jdwlabs/.github ref to fetch gitleaks.toml from when the runner does not expose the reusable workflow's own SHA
+        type: string
+        default: main
 
 jobs:
   scan:
@@ -63,13 +67,15 @@ jobs:
           path: repo
 
       # Fetch the org config at the exact ref this reusable workflow is
-      # running from (job_workflow_sha), so workflow and config can never
-      # drift apart — including when a caller pins a non-main ref.
+      # running from (job_workflow_sha), so workflow and config cannot drift
+      # apart. The runner leaves job_workflow_sha empty for branch-referenced
+      # reusable workflows, so fall back to config-ref (default: main, where
+      # both this workflow and gitleaks.toml live in lockstep).
       - name: Checkout org gitleaks config
         uses: actions/checkout@v6.0.3
         with:
           repository: jdwlabs/.github
-          ref: ${{ github.job_workflow_sha }}
+          ref: ${{ github.job_workflow_sha || inputs.config-ref }}
           path: org-config
 
       - name: Install gitleaks
