@@ -29,14 +29,15 @@ Runs GoReleaser to cross-compile and publish a Go binary release.
 
 | Input | Required | Default | Description |
 |---|---|---|---|
-| `goreleaser-config` | No | `.goreleaser.yaml` | Path to GoReleaser config |
-| `go-version-file` | No | `go.mod` | Path to `go.mod` or `go.work` for version resolution |
+| `goreleaser-config` | No | `.goreleaser.yaml` | Path to GoReleaser config (resolved relative to `workdir`) |
+| `go-version-file` | No | `go.mod` | Path to `go.mod` or `go.work` for version resolution (repo-relative) |
+| `workdir` | No | `.` | Working directory containing the Go module, for monorepo subdirectories |
 
-**Example caller:**
+**Example caller (module in a subdirectory):**
 
 ```yaml
-# .github/workflows/release.yml
-name: Release
+# .github/workflows/release-platformctl.yml
+name: Release platformctl
 
 on:
   push:
@@ -50,10 +51,11 @@ jobs:
   release:
     uses: jdwlabs/.github/.github/workflows/release-go.yml@main
     with:
-      goreleaser-config: .goreleaser.yaml
+      workdir: cli
+      go-version-file: cli/go.mod
 ```
 
-**Used by:** `infrastructure` (talops), `platform` (platformctl)
+**Used by:** `platform` (platformctl). `infrastructure` (talops) intentionally keeps a bespoke release job: its artifacts are raw `talops-<os>-<arch>` binaries (not GoReleaser archives), it injects the `v`-prefixed tag into `cmd.version`, and it runs `go test -race` as a release gate — swapping blind would change published artifact names and drop the test gate.
 
 ---
 
@@ -145,16 +147,25 @@ jobs:
 
 ---
 
-## `security-scan.yml` — Security Scan (Trivy + SARIF)
+## `security-scan.yml` — Security Scan (Trivy + SARIF, gitleaks gate)
 
-Runs Trivy in filesystem mode (SCA + IaC/Dockerfile misconfig + secrets) and
-uploads results as SARIF to the calling repo's Security tab. See
-`docs/code-scanning-strategy.md` for the tooling evaluation behind this
-choice.
+Two jobs:
+
+- **`scan`** — Trivy in filesystem mode (SCA + IaC/Dockerfile misconfig +
+  secrets), uploading results as SARIF to the calling repo's Security tab.
+  Advisory by default (`fail-on-findings`). See
+  `docs/code-scanning-strategy.md` for the tooling evaluation behind this
+  choice.
+- **`gitleaks`** — blocking secrets gate. Runs gitleaks (pinned, checksum
+  verified) over the checked-out tree with the org-wide config
+  (`gitleaks.toml` at this repo's root, fetched at the same ref as the
+  workflow). Any leak fails the job; zero findings passes with an explicit
+  message. Allowlist entries are value-pinned to known-fake fixtures — add
+  new exemptions there, never in caller repos.
 
 **Trigger:** any (typically `pull_request` + `push: main`)
 
-**Inputs:**
+**Inputs (Trivy job only; the gitleaks job takes no inputs):**
 
 | Input | Required | Default | Description |
 |---|---|---|---|
@@ -182,7 +193,7 @@ jobs:
     uses: jdwlabs/.github/.github/workflows/security-scan.yml@main
 ```
 
-**Used by:** `apps` (PoC, JDWLABS-71)
+**Used by:** `apps`, `platform`, `infrastructure`, `deployments`
 
 ---
 
