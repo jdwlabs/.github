@@ -86,11 +86,14 @@ jobs:
           tar -xzf gitleaks.tar.gz gitleaks
           sudo install gitleaks /usr/local/bin/gitleaks
 
+      # --verbose itemizes each finding (file/line/rule) so a blocked PR is
+      # actionable from the log alone; --redact keeps the secret itself out.
       - name: Run gitleaks (blocking)
         run: |
           gitleaks dir repo \
             --config org-config/gitleaks.toml \
             --redact \
+            --verbose \
             --no-banner \
             --exit-code 1
           echo "gitleaks: 0 leaks found — secrets gate passed"
