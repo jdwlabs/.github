@@ -19,6 +19,10 @@ on:
         description: jdwlabs/.github ref to fetch gitleaks.toml from when the runner does not expose the reusable workflow's own SHA
         type: string
         default: main
+      max-binary-bytes:
+        description: Largest binary file a pull request may add, in bytes. Raise it deliberately in the calling repo if an asset genuinely belongs in git.
+        type: number
+        default: 1048576
 
 jobs:
   scan:
@@ -97,3 +101,75 @@ jobs:
             --no-banner \
             --exit-code 1
           echo "gitleaks: 0 leaks found — secrets gate passed"
+
+  # Blocking size gate on binaries a pull request *adds*. A build artifact
+  # committed by accident stays in history forever once merged: the working
+  # tree can be cleaned in a follow-up commit, but every clone still pays for
+  # the blob, and rebase-merging preserves the commit that introduced it.
+  # A 10MB Windows binary reached main this way, cleaned one commit later and
+  # still costing 5.6MB packed in perpetuity — .gitignore alone did not catch
+  # it, because the file was added before the ignore rule existed.
+  #
+  # Scoped to added files so the gate can be introduced without rewriting any
+  # existing content, and to pull requests because it needs a base to diff
+  # against.
+  binaries:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository under scan
+        uses: actions/checkout@v6.0.3
+        with:
+          # Both endpoints of the comparison must be present locally; the
+          # default shallow clone does not reach the base commit.
+          fetch-depth: 0
+
+      - name: Reject oversized binaries added by this pull request
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          MAX_BYTES: ${{ inputs.max-binary-bytes }}
+        run: |
+          set -euo pipefail
+
+          # Walk every commit in the range rather than diffing base against
+          # head. These repos merge by rebase, so each commit lands on main
+          # individually: a branch that adds a blob and deletes it again in a
+          # later commit has a clean net diff while still carrying the blob
+          # into history permanently. That is precisely how the incident above
+          # happened, and a net-diff check does not see it.
+          #
+          # git reports "-" for both add and delete counts on files it treats
+          # as binary. That is a content test, not an extension list, so a
+          # renamed .exe or an unfamiliar format is caught just the same.
+          violations=0
+          binaries_added=0
+
+          while read -r sha; do
+            [ -n "${sha}" ] || continue
+            while IFS=$'\t' read -r added deleted path; do
+              [ "${added}" = "-" ] && [ "${deleted}" = "-" ] || continue
+              binaries_added=$((binaries_added + 1))
+              size=$(git cat-file -s "${sha}:${path}")
+              if [ "${size}" -gt "${MAX_BYTES}" ]; then
+                printf '  %s — %s bytes (limit %s), added in %s\n' \
+                  "${path}" "${size}" "${MAX_BYTES}" "${sha:0:9}"
+                violations=$((violations + 1))
+              fi
+            done < <(git diff-tree --no-commit-id --numstat --diff-filter=A -r "${sha}")
+          done < <(git rev-list "${BASE_SHA}".."${HEAD_SHA}")
+
+          if [ "${violations}" -gt 0 ]; then
+            echo
+            echo "::error::${violations} oversized binary file(s) added — see the list above."
+            echo "Deleting the file in a later commit does not clear this: these repos"
+            echo "rebase-merge, so the commit that added it still lands on main and the"
+            echo "blob stays in history for every clone. Rewrite the branch so the file"
+            echo "is never added, and add the path to .gitignore. If the file genuinely"
+            echo "belongs in git, raise max-binary-bytes in this repo's caller."
+            exit 1
+          fi
+
+          echo "binary size gate: 0 oversized binaries added — passed (limit ${MAX_BYTES} bytes, ${binaries_added} binary file(s) added across the range)"
