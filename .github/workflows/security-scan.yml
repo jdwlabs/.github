@@ -147,19 +147,45 @@ jobs:
           violations=0
           binaries_added=0
 
+          # Every git call is checked explicitly and any failure exits
+          # non-zero. A blocking gate that inspected nothing yet reported a
+          # pass is worse than no gate, and the range genuinely can become
+          # unresolvable — a base branch rewritten between the pull_request
+          # event and this job leaves the base commit unreachable. Reading the
+          # walk from a process substitution would hide exactly that failure
+          # from both `set -e` and `pipefail`.
+          if ! commits=$(git rev-list "${BASE_SHA}".."${HEAD_SHA}"); then
+            echo "::error::Cannot resolve ${BASE_SHA}..${HEAD_SHA} — refusing to report a pass without inspecting the range."
+            exit 1
+          fi
+
+          # NUL-terminated records keep paths verbatim. The default C-quoting
+          # of non-ASCII and control characters would reach cat-file as literal
+          # quotes and backslashes and abort the step, blocking a pull request
+          # that added a perfectly small, legitimate file.
+          numstat=$(mktemp)
+          trap 'rm -f "${numstat}"' EXIT
+
           while read -r sha; do
             [ -n "${sha}" ] || continue
-            while IFS=$'\t' read -r added deleted path; do
+            if ! git diff-tree --no-commit-id --numstat -z --diff-filter=A -r "${sha}" >"${numstat}"; then
+              echo "::error::Cannot diff ${sha} — refusing to report a pass without inspecting it."
+              exit 1
+            fi
+            while IFS=$'\t' read -r -d '' added deleted path; do
               [ "${added}" = "-" ] && [ "${deleted}" = "-" ] || continue
               binaries_added=$((binaries_added + 1))
-              size=$(git cat-file -s "${sha}:${path}")
+              if ! size=$(git cat-file -s "${sha}:${path}"); then
+                echo "::error::Cannot size ${path} in ${sha} — refusing to report a pass without inspecting it."
+                exit 1
+              fi
               if [ "${size}" -gt "${MAX_BYTES}" ]; then
                 printf '  %s — %s bytes (limit %s), added in %s\n' \
                   "${path}" "${size}" "${MAX_BYTES}" "${sha:0:9}"
                 violations=$((violations + 1))
               fi
-            done < <(git diff-tree --no-commit-id --numstat --diff-filter=A -r "${sha}")
-          done < <(git rev-list "${BASE_SHA}".."${HEAD_SHA}")
+            done <"${numstat}"
+          done <<<"${commits}"
 
           if [ "${violations}" -gt 0 ]; then
             echo
