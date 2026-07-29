@@ -147,9 +147,9 @@ jobs:
 
 ---
 
-## `security-scan.yml` — Security Scan (Trivy + SARIF, gitleaks gate)
+## `security-scan.yml` — Security Scan (Trivy + SARIF, gitleaks and binary gates)
 
-Two jobs:
+Three jobs:
 
 - **`scan`** — Trivy in filesystem mode (SCA + IaC/Dockerfile misconfig +
   secrets), uploading results as SARIF to the calling repo's Security tab.
@@ -163,8 +163,19 @@ Two jobs:
   zero findings passes with an explicit message. Allowlist entries are
   value-pinned to known-fake fixtures — add new exemptions there, never in
   caller repos.
+- **`binaries`** — blocking size gate on binary files a pull request *adds*.
+  Runs on `pull_request` events only (it needs a base to diff against) and
+  skips otherwise. Walks every commit in `base..head` rather than the net
+  diff, because these repos rebase-merge: a branch that adds a blob and
+  deletes it in a later commit still lands the blob on `main` permanently.
+  Binary-ness is git's own content test (`--numstat` reporting `-`/`-`), not
+  an extension list. Scoped to added files (`--diff-filter=A`), so existing
+  repo content is never rewritten to adopt the gate. Any added binary larger
+  than `max-binary-bytes` fails the job with the offending path, size, and
+  commit. Raise `max-binary-bytes` in the caller when a large asset genuinely
+  belongs in git.
 
-**Trigger:** any (typically `pull_request` + `push: main`)
+**Trigger:** any (typically `pull_request` + `push: main`); the `binaries` job runs only on `pull_request`
 
 **Inputs:**
 
@@ -174,6 +185,7 @@ Two jobs:
 | `severity` | No | `CRITICAL,HIGH` | Comma-separated severities Trivy reports |
 | `fail-on-findings` | No | `false` | Fail the Trivy job on findings at/above `severity`. SARIF uploads regardless. |
 | `config-ref` | No | `main` | jdwlabs/.github ref for `gitleaks.toml` when the runner doesn't expose the workflow's own SHA. Only override when pinning the workflow itself to a non-main ref (e.g. pre-merge testing). |
+| `max-binary-bytes` | No | `1048576` (1 MiB) | Largest binary file a pull request may add (`binaries` job). Raise deliberately in the caller when an asset genuinely belongs in git. |
 
 **Example caller:**
 
