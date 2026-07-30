@@ -206,7 +206,20 @@ jobs:
     uses: jdwlabs/.github/.github/workflows/security-scan.yml@main
 ```
 
-**Used by:** `apps`, `platform`, `infrastructure`, `deployments`
+**Used by:** `apps`, `platform`, `infrastructure`, `deployments`, and this repo
+via `security-scan-self.yml`.
+
+This repo's own caller differs from the four above in two ways, both deliberate:
+
+- It references the workflow by **local path** (`./.github/workflows/security-scan.yml`)
+  rather than `@main`, so a pull request changing the reusable workflow is gated
+  by the version in that pull request instead of the copy already on `main`.
+- It passes `config-ref: ${{ github.head_ref || github.ref_name }}`, because
+  `gitleaks.toml` lives here — a pull request editing the allowlist must be
+  scanned with the edited config, not with `main`'s.
+
+Callers in other repos want neither behaviour: they should track the reviewed
+workflow on `main`, and they do not own the config.
 
 ---
 
