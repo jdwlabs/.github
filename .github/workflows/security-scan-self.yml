@@ -1,0 +1,24 @@
+name: Security Scan (self)
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  scan:
+    # Referenced by local path, not `@main`, so a pull request that changes the
+    # reusable workflow is gated by its own version rather than by the copy
+    # already on main. Two workflow defects shipped past review because nothing
+    # exercised them before merge.
+    uses: ./.github/workflows/security-scan.yml
+    with:
+      # This repo owns gitleaks.toml, so a pull request editing the allowlist
+      # must be scanned with the edited config. config-ref cannot be inferred
+      # by the reusable workflow, so pass it: the PR branch on pull_request,
+      # the pushed branch otherwise.
+      config-ref: ${{ github.head_ref || github.ref_name }}
