@@ -221,6 +221,24 @@ This repo's own caller differs from the four above in two ways, both deliberate:
 Callers in other repos want neither behaviour: they should track the reviewed
 workflow on `main`, and they do not own the config.
 
+### What each job actually contributes here
+
+The three jobs are called as a unit and cannot be selected individually, so this
+is a record of what the scan is really worth on a repository of Markdown,
+workflow YAML and org config — not a claim that all three pull equal weight.
+
+| Job | Contribution to this repo |
+| --- | --- |
+| `gitleaks` | The one that earns it. Templates, workflow YAML and JSON config are exactly the file types a pasted token lands in, and this gate blocks. |
+| `binaries` | Cheap and repo-agnostic. The incident behind it — a build artifact reaching `main` and staying in history under rebase-merge — does not care what a repo contains. |
+| `scan` (Trivy) | Close to inert here, and worth stating plainly. There are no lockfiles, so `vuln` has nothing to resolve; `misconfig` targets Dockerfiles, Kubernetes, Terraform, CloudFormation, ARM and Helm, none of which exist in this repo. Only its `secret` scanner sees anything, and that overlaps `gitleaks`, which already blocks. It costs one advisory job and is left enabled for uniformity with the other four callers. |
+
+Trivy's misconfiguration scanner does **not** cover GitHub Actions workflow
+files, which is most of this repo's non-Markdown content. Anyone reasoning about
+coverage here should not assume the workflow YAML is being statically analysed —
+`actionlint` is what reads it, and that runs locally rather than in this
+pipeline.
+
 ---
 
 ## Tag Convention
