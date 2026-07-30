@@ -209,8 +209,10 @@ jobs:
 
 **Used by:** `apps`, `platform`, `infrastructure`, `deployments`, and this repo
 itself via `self-scan.yml`. The self-caller uses the local `./` form rather than
-`@main` so a pull request that changes the gates is checked by its own version
-of them, not by the version it replaces.
+`@main` so a pull request that changes this workflow runs its own version of it,
+not the version it replaces. `gitleaks.toml` is exempt from that: the runner
+leaves `job_workflow_sha` empty for local calls as well, so the config still
+comes from `config-ref` (`main`).
 
 ---
 

@@ -13,9 +13,14 @@ jobs:
   scan:
     # Local `./` form, not `jdwlabs/.github/...@main` like the four code repos
     # use. This is the repository the reusable workflow lives in, so the `@main`
-    # form would scan every pull request with main's copy of the gates — a
-    # change to `security-scan.yml` or `gitleaks.toml` would report green on the
-    # strength of the version it is replacing. The local form resolves to the
-    # caller's own commit, so a pull request here is checked by the gates it
-    # proposes. It cannot take a ref by design.
+    # form would scan every pull request with main's copy of the workflow — a
+    # change to `security-scan.yml` would report green on the strength of the
+    # version it is replacing. The local form resolves to the caller's own
+    # commit, so a pull request here runs the workflow it proposes. It cannot
+    # take a ref by design.
+    #
+    # This covers the workflow only, not `gitleaks.toml`: the runner leaves
+    # job_workflow_sha empty here too, so the gitleaks job falls back to
+    # fetching the config from main. A pull request changing the allowlist is
+    # still scanned with main's copy of it.
     uses: ./.github/workflows/security-scan.yml
