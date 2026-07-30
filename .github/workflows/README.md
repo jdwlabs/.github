@@ -207,7 +207,10 @@ jobs:
     uses: jdwlabs/.github/.github/workflows/security-scan.yml@main
 ```
 
-**Used by:** `apps`, `platform`, `infrastructure`, `deployments`
+**Used by:** `apps`, `platform`, `infrastructure`, `deployments`, and this repo
+itself via `self-scan.yml`. The self-caller uses the local `./` form rather than
+`@main` so a pull request that changes the gates is checked by its own version
+of them, not by the version it replaces.
 
 ---
 

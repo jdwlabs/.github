@@ -1,0 +1,21 @@
+name: Security Scan (self)
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  scan:
+    # Local `./` form, not `jdwlabs/.github/...@main` like the four code repos
+    # use. This is the repository the reusable workflow lives in, so the `@main`
+    # form would scan every pull request with main's copy of the gates — a
+    # change to `security-scan.yml` or `gitleaks.toml` would report green on the
+    # strength of the version it is replacing. The local form resolves to the
+    # caller's own commit, so a pull request here is checked by the gates it
+    # proposes. It cannot take a ref by design.
+    uses: ./.github/workflows/security-scan.yml
