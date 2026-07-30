@@ -158,11 +158,10 @@ Three jobs:
   choice.
 - **`gitleaks`** — blocking secrets gate. Runs gitleaks (pinned, checksum
   verified) over the checked-out tree with the org-wide config
-  (`gitleaks.toml` at this repo's root, fetched at the workflow's own commit
-  when the runner exposes it, else at `config-ref`). Any leak fails the job;
-  zero findings passes with an explicit message. Allowlist entries are
-  value-pinned to known-fake fixtures — add new exemptions there, never in
-  caller repos.
+  (`gitleaks.toml` at this repo's root, fetched at `config-ref`, default
+  `main`). Any leak fails the job; zero findings passes with an explicit
+  message. Allowlist entries are value-pinned to known-fake fixtures — add new
+  exemptions there, never in caller repos.
 - **`binaries`** — blocking size gate on binary files a pull request *adds*.
   Runs on `pull_request` events only (it needs a base to diff against) and
   skips otherwise. Walks every commit in `base..head` rather than the net
@@ -184,7 +183,7 @@ Three jobs:
 | `scan-path` | No | `.` | Repo-relative path to scan (Trivy job) |
 | `severity` | No | `CRITICAL,HIGH` | Comma-separated severities Trivy reports |
 | `fail-on-findings` | No | `false` | Fail the Trivy job on findings at/above `severity`. SARIF uploads regardless. |
-| `config-ref` | No | `main` | jdwlabs/.github ref for `gitleaks.toml` when the runner doesn't expose the workflow's own SHA. Only override when pinning the workflow itself to a non-main ref (e.g. pre-merge testing). |
+| `config-ref` | No | `main` | jdwlabs/.github ref to fetch `gitleaks.toml` from. A reusable workflow cannot resolve its own ref, so this cannot be inferred: if you pin the workflow to a non-main ref (e.g. pre-merge testing), pass that same ref here or the pinned logic runs against `main`'s config. |
 | `max-binary-bytes` | No | `1048576` (1 MiB) | Largest binary file a pull request may add (`binaries` job). Raise deliberately in the caller when an asset genuinely belongs in git. |
 
 **Example caller:**
