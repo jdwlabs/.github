@@ -16,7 +16,7 @@ on:
         type: boolean
         default: false
       config-ref:
-        description: jdwlabs/.github ref to fetch gitleaks.toml from when the runner does not expose the reusable workflow's own SHA
+        description: jdwlabs/.github ref to fetch gitleaks.toml from. Pass the ref you pinned this workflow to, otherwise pinned workflow logic runs against main's config.
         type: string
         default: main
       max-binary-bytes:
@@ -70,16 +70,22 @@ jobs:
         with:
           path: repo
 
-      # Fetch the org config at the exact ref this reusable workflow is
-      # running from (job_workflow_sha), so workflow and config cannot drift
-      # apart. The runner leaves job_workflow_sha empty for branch-referenced
-      # reusable workflows, so fall back to config-ref (default: main, where
-      # both this workflow and gitleaks.toml live in lockstep).
+      # A reusable workflow cannot discover its own ref: the github context
+      # exposes workflow_sha/workflow_ref, and both describe the *caller*.
+      # job_workflow_sha exists only as an OIDC token claim, not as a context
+      # property, so reading it here yielded the empty string and silently took
+      # the fallback on every run — the drift this once claimed to prevent was
+      # never actually prevented.
+      #
+      # The config ref is therefore an explicit input, defaulting to main where
+      # this workflow and gitleaks.toml live in lockstep. A caller that pins the
+      # workflow to a non-main ref must pass that same ref as config-ref, or it
+      # runs new workflow logic against main's config.
       - name: Checkout org gitleaks config
         uses: actions/checkout@v6.0.3
         with:
           repository: jdwlabs/.github
-          ref: ${{ github.job_workflow_sha || inputs.config-ref }}
+          ref: ${{ inputs.config-ref }}
           path: org-config
 
       - name: Install gitleaks
