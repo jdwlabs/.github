@@ -21,7 +21,8 @@ Python, shell, Terraform, Helm, Kubernetes manifests, Dockerfiles).
 - **Dependabot** — described here as active on `apps` for version and security
   updates. *Since then:* version updates consolidated onto **Renovate** (a
   `renovate.json` per repo plus an org-level default). Dependabot vulnerability
-  alerts remain enabled; its automated security fixes are not.
+  alerts remain enabled; its automated security fixes are not. That split is
+  deliberate — see below.
 - **Secret scanning + push protection** — free on public repos, and every
   jdwlabs repo is public, so this was assumed to be on org-wide. The assumption
   was recorded here as something to verify, and was not: checked 2026-07-29,
@@ -29,6 +30,41 @@ Python, shell, Terraform, Helm, Kubernetes manifests, Dockerfiles).
   setting, not a workflow change, and is tracked separately. A CI secrets gate
   is not a substitute for push protection, which rejects the push itself rather
   than failing a pull request after the fact.
+
+### Decision: Renovate remediates, Dependabot only detects
+
+Dependabot's **automated security fixes** stay disabled; its **vulnerability
+alerts** stay enabled. Verified 2026-07-30 on all five repositories:
+`automated-security-fixes` reports `enabled=false`, `vulnerability-alerts`
+returns `204` (enabled).
+
+The reasoning follows the ownership rule the org-wide Renovate preset
+(`default.json`) already states for dependency automation generally:
+
+> Renovate is the single owner of dependency automation in this org;
+> repository-level (UI) Dependabot should remain disabled so updates arrive
+> through one reviewable pipeline.
+
+Security work is not an exception to that ownership, because the preset already
+exempts it from Renovate's weekly batching — `vulnerabilityAlerts` runs on
+`schedule: ["at any time"]` with `prCreation: "immediate"`, alongside
+`osvVulnerabilityAlerts`. A fix pull request therefore opens as soon as an
+advisory lands, which is the same outcome enabling Dependabot's automated fixes
+would buy. Running both puts two bots on one job: competing pull requests
+against the same manifest, in repositories that are rebase-merge-only, so the
+second one read is a conflict to resolve rather than a duplicate to close.
+
+One dependency is worth naming, because it inverts the obvious cleanup:
+`vulnerabilityAlerts` is Renovate reading *GitHub's* Dependabot alerts — it
+requires the dependency graph and Dependabot alerts switched on, and the app
+granted read access to them. Switching the alerts off to "finish" retiring
+Dependabot would therefore disable Renovate's main security path, leaving only
+`osvVulnerabilityAlerts`, which covers direct dependencies alone. The alerts are
+load-bearing; only the automated fixes are redundant.
+
+Revisit if Renovate stops opening a fix pull request within a day of an alert
+appearing, or if Renovate is dropped as the update tool. Automated security
+fixes are a per-repository setting and reversible either way.
 
 ## Comparison matrix
 
