@@ -309,6 +309,33 @@ check is gated by its own version, not by the copy already on `main`.
 
 ---
 
+## `verify-main-signatures.yml` — Signed-tip Audit
+
+Not reusable and not called by anything: a scheduled job in this repo that reads
+the tip commit of `main` in all five org repositories through the API and fails
+if any of them is unsigned.
+
+**Trigger:** `schedule` (daily) and `workflow_dispatch`. Takes no inputs and
+needs no secret — every org repository is public, so `GITHUB_TOKEN` can read
+their commits.
+
+It exists because `required_signatures` cannot be trusted as its own evidence.
+The rule is active on `main` in three repositories, yet nothing has landed
+verified there — for the reason the section above gives: a rebase-merge rebuilds
+each commit server-side and signs none of the results. Nothing failed and
+nothing was rejected; the gap was only found by querying commits directly.
+
+That makes this the complement of `verify-pr-signatures.yml` rather than a
+duplicate of it. That one gates the signature that is real, on the branch. This
+one watches what actually lands, so the day a merge path stops destroying
+signatures — or starts destroying them somewhere new — it is observed rather
+than assumed.
+
+A red run here means signatures are being lost between branch and `main` — the
+step summary names which repositories and what reason the API gave.
+
+---
+
 ## Tag Convention
 
 | Repo type | Tag format | Example |

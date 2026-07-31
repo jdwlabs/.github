@@ -1,0 +1,66 @@
+name: Verify Signed Main
+
+# Rebase merging re-creates each commit server-side and does not re-sign it, so
+# a signature that is valid on the pull-request branch is gone by the time the
+# same change reaches `main`. The `required_signatures` rule reports as enforced
+# throughout, which is why an unsigned range went unnoticed for sixteen days.
+# This audit reads the tip of every default branch so the next lapse surfaces in
+# a day rather than by accident.
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # No checkout: this reads the GitHub API, not the working tree. Every org
+      # repository is public, so the repo-scoped token is sufficient to read
+      # their commits — no cross-repo PAT is required.
+      - name: Check the tip commit of every default branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          unsigned=0
+          checked=0
+
+          {
+            echo '| Repository | Tip | Verified | Reason |'
+            echo '| --- | --- | --- | --- |'
+          } >>"${GITHUB_STEP_SUMMARY}"
+
+          for repo in apps platform infrastructure deployments .github; do
+            tip=$(gh api "repos/jdwlabs/${repo}/commits?sha=main&per_page=1" \
+              --jq '.[] | "\(.sha) \(.commit.verification.verified) \(.commit.verification.reason)"')
+            # shellcheck disable=SC2086
+            set -- ${tip}
+            sha=$1
+            verified=$2
+            reason=$3
+
+            checked=$((checked + 1))
+            printf '%-16s %s verified=%s reason=%s\n' "${repo}" "${sha:0:8}" "${verified}" "${reason}"
+            echo "| \`${repo}\` | \`${sha:0:8}\` | ${verified} | ${reason} |" >>"${GITHUB_STEP_SUMMARY}"
+
+            if [ "${verified}" != "true" ]; then
+              unsigned=$((unsigned + 1))
+            fi
+          done
+
+          echo
+          if [ "${unsigned}" -eq 0 ]; then
+            echo "0 issues: all ${checked} default branches have a verified tip commit."
+            exit 0
+          fi
+
+          echo "${unsigned} of ${checked} default branches have an unsigned tip commit."
+          echo "Signatures are being lost between the pull-request branch and main."
+          exit 1
