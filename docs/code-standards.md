@@ -31,6 +31,16 @@ How this is enforced (standard GitHub layering):
 - PRs: one concern, template filled, linked ticket where one exists, every review thread and bot/security finding fixed or explicitly justified before merge.
 - Commits signed and verified on GitHub (noreply email UID). History backfills in progress do not exempt new commits.
 
+### Tree-wide gates
+
+A **tree-wide gate** is any check whose result depends on files the pull request does not modify — it scans the repository, not the diff. Today's examples: `image-pin-check` (platform `Validate`, deployments `CI`), and the `extraManifests` pin test in infrastructure `Bootstrap`.
+
+Any merge to `main` can invalidate one, not only a merge touching the same files. **Green on the branch is not green on the merge result.** Two such gates, introduced within two minutes of each other, each passed on its own branch and went red on `main` on the merge commit that introduced it — `main` stayed red for about fifty minutes in both repos, so the fix was authored under pressure against a broken trunk.
+
+- A tree-wide gate runs on `pull_request` with **no `paths:` filter**. A path filter hides the gate on exactly the pull requests most likely to invalidate it, and makes the check unusable as a required one: a required check that never reports leaves every unrelated pull request permanently pending.
+- Before merging, rebase onto `origin/main` and confirm the pull request's own run is against the current tip. A green run against a superseded tip is evidence about a tree that no longer exists.
+- Requiring the check is what makes the gate blocking; requiring branches to be up to date before merging is what makes the point above mechanical instead of a habit. A gate no ruleset requires is advisory, whatever its name suggests.
+
 ## 3. Go (`platformctl`, `talops`, backend services)
 
 - `gofmt` + `goimports` clean; repo `.golangci.yml` is the lint contract and CI must run `golangci-lint run` as a required check.
