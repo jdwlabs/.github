@@ -31,7 +31,7 @@ jobs:
           go-version-file: ${{ inputs.go-version-file }}
           cache: false
 
-      - uses: goreleaser/goreleaser-action@v7.2.2
+      - uses: goreleaser/goreleaser-action@v7.2.3
         with:
           version: latest
           workdir: ${{ inputs.workdir }}
