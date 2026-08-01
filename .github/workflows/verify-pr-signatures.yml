@@ -1,0 +1,108 @@
+name: Verify PR Signatures
+
+on:
+  workflow_call:
+
+jobs:
+  # Signatures are enforced here, on the branch, rather than on the base
+  # branch, because a signature only survives as far as the merge. GitHub
+  # rebuilds every commit server-side when it rebase-merges and signs none of
+  # the results, so a signature requirement on a rebase-merged base branch is
+  # unsatisfiable by construction — including for a branch that is already
+  # rebased onto the base and has nothing to replay. The author's signature is
+  # verifiable exactly once: before the merge rewrites it. What lands on the
+  # base branch afterwards is GitHub's own object, and GitHub's audit log is
+  # the better provenance record for that.
+  signatures:
+    # Needs a pull request to read. On any other event there is no branch to
+    # attest, so the job skips rather than inventing a subject.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      # No checkout. Verification is GitHub's own `verified` field, not a local
+      # `git verify-commit`: the runner holds no keyring and no basis for
+      # trusting one, whereas GitHub checks the signature against the keys
+      # registered to the authoring account. "Signed by a key this account
+      # owns" is the property worth gating on; "signed by some key present on
+      # the runner" is not.
+      - name: Verify every commit in this pull request is signed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_COMMITS: ${{ github.event.pull_request.commits }}
+          PR_BASE: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+
+          # Failure to read is not a pass. A transient API error here would
+          # otherwise produce an empty commit list and a green check over a
+          # branch nothing ever looked at.
+          if ! commits=$(gh api --paginate "repos/${PR_REPO}/pulls/${PR_NUMBER}/commits" \
+            --jq '.[] | [
+                    .sha,
+                    (.commit.verification.verified | tostring),
+                    .commit.verification.reason,
+                    (.commit.author.name // "unknown"),
+                    (.commit.message | split("\n")[0])
+                  ] | @tsv'); then
+            echo "::error::Cannot read the commits of ${PR_REPO}#${PR_NUMBER} — refusing to report a pass without inspecting them."
+            exit 1
+          fi
+
+          total=0
+          unverified=0
+
+          # No author allowlist. Commits an App creates through the API
+          # (Renovate, Dependabot, the release bot) are signed by GitHub's own
+          # web-flow key and verify natively, so they need no exemption — and
+          # an allowlist keyed on author name would be a hole that any commit
+          # claiming that name walks straight through. An App commit that a
+          # later rebase rewrites loses its signature and correctly fails here.
+          while IFS=$'\t' read -r sha verified reason author subject; do
+            [ -n "${sha}" ] || continue
+            total=$((total + 1))
+            if [ "${verified}" != "true" ]; then
+              if [ "${unverified}" -eq 0 ]; then
+                echo "Unsigned or unverifiable commits on this branch:"
+                echo
+              fi
+              printf '  %s  %s\n' "${sha:0:9}" "${subject}"
+              printf '    author: %s\n' "${author}"
+              printf '    reason: %s\n' "${reason}"
+              echo
+              unverified=$((unverified + 1))
+            fi
+          done <<<"${commits}"
+
+          if [ "${total}" -eq 0 ]; then
+            echo "::error::${PR_REPO}#${PR_NUMBER} contains no commits — there is nothing to attest, so this check cannot report a pass."
+            echo "A pull request whose branch has been reset to its base has no changes to merge either; push the intended commits."
+            exit 1
+          fi
+
+          # The commits endpoint returns at most 250 entries and says nothing
+          # when it truncates. The event payload carries the branch's true
+          # count, so a mismatch means part of the branch went unread — report
+          # that instead of passing over the portion that happened to fit.
+          if [ "${total}" -ne "${PR_COMMITS}" ]; then
+            echo "::error::Read ${total} commit(s) but this pull request has ${PR_COMMITS} — refusing to report a pass over part of the branch."
+            echo "The commits endpoint caps at 250. Split the pull request, or squash the branch, so every commit can be inspected."
+            exit 1
+          fi
+
+          if [ "${unverified}" -gt 0 ]; then
+            echo "::error::${unverified} of ${total} commit(s) on this branch are not verified — see the list above."
+            echo "Sign the branch and force-push:"
+            echo "  git rebase --exec 'git commit --amend --no-edit -S' origin/${PR_BASE}..HEAD"
+            echo "  git push --force-with-lease"
+            echo "GitHub verifies against the keys registered on the authoring account, so the"
+            echo "signing key must be uploaded there and the commit's author email must be one of"
+            echo "that account's verified addresses. A key that is absent or an email that is not"
+            echo "reports bad_email or unknown_key rather than unsigned — the reason above says which."
+            exit 1
+          fi
+
+          echo "pull request commit signatures: ${total} commit(s), all verified — passed"
