@@ -15,7 +15,7 @@ jobs:
       pages-url: https://jdwlabs.github.io/platform
 ```
 
-Callers must set the appropriate `permissions` and trigger (always `push: tags`). The reusable workflow inherits the calling repo's `GITHUB_TOKEN` automatically.
+Callers must set the appropriate `permissions` and trigger — `push: tags` for the release workflows, `pull_request` for the gates. The reusable workflow inherits the calling repo's `GITHUB_TOKEN` automatically.
 
 ---
 
@@ -238,6 +238,74 @@ files, which is most of this repo's non-Markdown content. Anyone reasoning about
 coverage here should not assume the workflow YAML is being statically analysed —
 `actionlint` is what reads it, and that runs locally rather than in this
 pipeline.
+
+---
+
+## `verify-pr-signatures.yml` — Pull Request Commit Signatures
+
+Reads every commit in a pull request through the API and fails if any is not
+`verified`. Each offending commit is named with its short SHA, subject, author
+and GitHub's own `reason` (`unsigned`, `bad_email`, `unknown_key`, …), so a red
+check says which commit and why. A clean branch reports `N commit(s), all
+verified — passed` rather than passing silently.
+
+**Why the branch and not `main`.** A signature only survives as far as the
+merge. GitHub rebuilds every commit server-side when it rebase-merges and signs
+none of the results — including on a branch already rebased onto the base, where
+there is nothing to replay. A signature requirement on a rebase-merged base
+branch is therefore unsatisfiable by construction, which is why merges here need
+`--admin`. Enforcing on the branch gates the artefact whose signature is real:
+the author's. What lands on the base branch afterwards is GitHub's own object,
+and GitHub's audit log is the better provenance record for that.
+
+**Trigger:** `pull_request`. The job skips on any other event — there is no
+branch to attest.
+
+**Inputs:** none.
+
+**Permissions:** `contents: read`, no secret. All five repos are public and the
+job never checks out code; it reads the API with `GITHUB_TOKEN`.
+
+**No local `git verify-commit`.** The runner holds no keyring and no basis for
+trusting one. GitHub's `verified` field checks the signature against the keys
+registered to the authoring account, which is the property worth gating on.
+
+**No author allowlist.** Commits an App creates through the API (Renovate,
+Dependabot, the release bot) are signed with GitHub's own web-flow key and
+verify natively, so they need no exemption. An allowlist keyed on author name
+would be a hole that any commit claiming that name walks through. An App commit
+that a later rebase rewrites does lose its signature, and correctly fails.
+
+**Behaviours worth knowing before you hit them:**
+
+| Case | Result |
+| --- | --- |
+| Fork pull request | Works. The base repo's PR-commits endpoint returns the fork's commits, and the read-only `GITHUB_TOKEN` a fork PR receives still carries `contents: read` on a public repo. A fork contributor must have their signing key registered on *their* GitHub account and commit from a verified address — GitHub verifies against the author's account, not the org's. |
+| Pull request with zero commits | Fails, deliberately. A branch reset to its base has nothing to attest, and reporting a pass over nothing is a green check backed by no evidence. Such a pull request has no changes to merge either. |
+| Pull request over 250 commits | Fails. The commits endpoint caps at 250 and does not say when it truncates, so the job compares what it read against the event payload's count and refuses to pass over a partial branch. |
+| API read error | Fails. A transient error would otherwise yield an empty commit list and a green check over a branch nothing inspected. |
+
+**Example caller:**
+
+```yaml
+# .github/workflows/verify-pr-signatures.yml
+name: Verify PR Signatures
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  signatures:
+    uses: jdwlabs/.github/.github/workflows/verify-pr-signatures.yml@main
+```
+
+**Used by:** `apps`, `platform`, `infrastructure`, `deployments`, and this repo
+via `verify-pr-signatures-self.yml`, which references the workflow by local path
+for the same reason `security-scan-self.yml` does — a pull request changing the
+check is gated by its own version, not by the copy already on `main`.
 
 ---
 

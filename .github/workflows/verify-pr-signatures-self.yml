@@ -1,0 +1,13 @@
+name: Verify PR Signatures (self)
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  signatures:
+    # Referenced by local path, not `@main`, so a pull request that changes the
+    # check is gated by its own version rather than by the copy already on main.
+    uses: ./.github/workflows/verify-pr-signatures.yml
