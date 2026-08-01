@@ -31,7 +31,7 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v6.0.3
+      - uses: actions/checkout@v7.0.1
 
       # Trivy in filesystem mode covers SCA (lockfiles: go.mod, package.json,
       # gradle), IaC misconfig (Terraform, Helm, Kubernetes manifests),
@@ -66,7 +66,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository under scan
-        uses: actions/checkout@v6.0.3
+        uses: actions/checkout@v7.0.1
         with:
           path: repo
 
@@ -82,7 +82,7 @@ jobs:
       # workflow to a non-main ref must pass that same ref as config-ref, or it
       # runs new workflow logic against main's config.
       - name: Checkout org gitleaks config
-        uses: actions/checkout@v6.0.3
+        uses: actions/checkout@v7.0.1
         with:
           repository: jdwlabs/.github
           ref: ${{ inputs.config-ref }}
@@ -126,7 +126,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository under scan
-        uses: actions/checkout@v6.0.3
+        uses: actions/checkout@v7.0.1
         with:
           # Both endpoints of the comparison must be present locally; the
           # default shallow clone does not reach the base commit.

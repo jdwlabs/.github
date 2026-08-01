@@ -19,7 +19,7 @@ jobs:
       contents: write
       pages: write
     steps:
-      - uses: actions/checkout@v6.0.3
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
 
