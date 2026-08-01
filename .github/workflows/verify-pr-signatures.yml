@@ -11,8 +11,8 @@ jobs:
   # unsatisfiable by construction — including for a branch that is already
   # rebased onto the base and has nothing to replay. The author's signature is
   # verifiable exactly once: before the merge rewrites it. What lands on the
-  # base branch afterwards is GitHub's own object, and GitHub's audit log is
-  # the better provenance record for that.
+  # base branch afterwards is GitHub's own object, and gating that object's
+  # signature would only ever assert something about GitHub.
   signatures:
     # Needs a pull request to read. On any other event there is no branch to
     # attest, so the job skips rather than inventing a subject.
