@@ -256,7 +256,7 @@ there is nothing to replay. A signature requirement on a rebase-merged base
 branch is therefore unsatisfiable by construction, which is why merges here need
 `--admin`. Enforcing on the branch gates the artefact whose signature is real:
 the author's. What lands on the base branch afterwards is GitHub's own object,
-and GitHub's audit log is the better provenance record for that.
+so gating its signature would only ever assert something about GitHub.
 
 **Trigger:** `pull_request`. The job skips on any other event — there is no
 branch to attest.
