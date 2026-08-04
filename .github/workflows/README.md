@@ -309,6 +309,57 @@ check is gated by its own version, not by the copy already on `main`.
 
 ---
 
+## `main-attribution.yml` — Default Branch Attribution
+
+**Not reusable.** This one runs here and only here: it reads other repositories
+rather than being called by them, so there is nothing for a caller to invoke.
+It is documented alongside the reusable workflows because this file is where
+anyone looks for what this repo's `workflows/` directory does.
+
+**Trigger:** `schedule` daily at 13:17 UTC, plus `workflow_dispatch` with an
+optional `days` input.
+
+Reports any commit on a default branch that no *merged* pull request accounts
+for. This is the detection half of branch protection: the `OrganizationAdmin`
+bypass is deliberate and load-bearing, so the rule cannot be enforced at push
+time for that actor — see [`docs/branch-protection-bypass.md`](../../docs/branch-protection-bypass.md)
+for why it exists and what would remove it. This job makes an exercised bypass
+visible instead of silent.
+
+**Covers:** `deployments`, `platform`, `infrastructure`, and this repo.
+**Not** `apps` — its release App still holds `bypass_mode: always` because
+`nx release` must land the version commit before the release tags can point at
+it, and no pull request fits inside that. Exempting it would mean an allowlist
+keyed on committer name and subject line, both supplied by the commit itself.
+Removing that bypass and adding `apps` here are the same change.
+
+Attributability, not signedness. An earlier attempt gated the signature of each
+default-branch tip and was abandoned: rebase merges are re-created server-side
+and never signed, so once `required_signatures` came off `main` an unsigned tip
+became the intended state and the job would have gone red daily over correct
+behaviour. The pull request association is the property that survives a rebase
+merge — GitHub keeps it — which is why this check gates on that instead.
+
+| Situation | Behaviour |
+|---|---|
+| Commit with a merged pull request | Passes. |
+| Commit with only an open or closed-unmerged pull request | Fails. That describes a proposal, not what landed. |
+| Commit with no pull request at all | Fails, with the commit URL and its committer. |
+| Over 100 commits in the window | Fails. 100 is the GraphQL page cap, so the job refuses to grade the portion that fitted; shorten `days` or page the query. |
+| API read error | Fails. A transient error would otherwise yield an empty node list and a green tick over a branch nothing inspected. |
+| Quiet repository, no commits in the window | Passes. Nothing landed, so there is nothing unattributed. |
+
+The window is rolling rather than anchored to a policy date. Two classes of
+unattributable commit sit in history and are not findings: the direct-push
+chart bumps on `deployments` from before releases moved to pull requests, and
+everything on `infrastructure` older than the GPG re-sign, which rewrote every
+SHA and detached them all from their pull requests. A window ages both out. A
+fixed cutoff would report them forever, and a check that is always red is a
+check nobody reads. Any future history rewrite will surface here for as many
+days as the window is long.
+
+---
+
 ## Tag Convention
 
 | Repo type | Tag format | Example |

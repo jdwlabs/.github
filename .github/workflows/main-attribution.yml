@@ -1,0 +1,164 @@
+name: Main Attribution
+
+# Reports commits that reached a default branch without a merged pull request
+# describing them. This is the detection half of branch protection: the
+# OrganizationAdmin bypass is deliberate and load-bearing (see
+# docs/branch-protection-bypass.md), so the rule cannot be enforced at push
+# time for that actor. What can be done is make an exercised bypass visible
+# instead of silent.
+#
+# Attributability, not signedness. An earlier version of this idea gated the
+# signature of each default-branch tip and had to be abandoned: rebase merges
+# are re-created server-side and never signed, so after `required_signatures`
+# was dropped from `main` an unsigned tip became the intended state and the job
+# would have gone red daily reporting correct behaviour. "Every commit is
+# accounted for by a merged pull request" is the property that survives the
+# merge, because GitHub keeps the association across the rebase.
+
+on:
+  schedule:
+    - cron: '17 13 * * *'
+  workflow_dispatch:
+    inputs:
+      days:
+        description: 'How many days of history to inspect'
+        required: false
+        default: '7'
+
+permissions:
+  contents: read
+
+jobs:
+  attribution:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report unattributed commits on every default branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # `apps` is absent on purpose. Its release App still holds
+          # `bypass_mode: always` because `nx release` has to land the version
+          # commit on the branch before it can point the release tags at it,
+          # which no pull request can sit inside. Including it would mean
+          # exempting that commit by committer name and subject line — a field
+          # the commit itself supplies, and therefore a hole anything claiming
+          # it walks through. Re-sourcing versions from the tags removes the
+          # bypass, and adding `apps` here is the same change.
+          REPOS: 'deployments platform infrastructure .github'
+          DAYS: ${{ github.event.inputs.days || '7' }}
+        run: |
+          set -euo pipefail
+
+          # A rolling window rather than a fixed policy date. Two known classes
+          # of unattributable commit sit in history and are not findings: the
+          # direct-push chart bumps on `deployments` from before releases moved
+          # to pull requests, and every commit on `infrastructure` older than
+          # the GPG re-sign, which rewrote each SHA and so detached them all
+          # from their pull requests. A window ages both out; a fixed date
+          # would report them forever and train the reader to skip the job.
+          # The daily schedule against a 7-day window also means a finding has
+          # to be missed seven times running to be missed at all.
+          since=$(date -u -d "${DAYS} days ago" +%Y-%m-%dT%H:%M:%SZ)
+          echo "Inspecting commits since ${since}"
+          echo
+
+          cat > query.graphql <<'GRAPHQL'
+          query($owner: String!, $name: String!, $since: GitTimestamp!) {
+            repository(owner: $owner, name: $name) {
+              defaultBranchRef {
+                name
+                target {
+                  ... on Commit {
+                    history(since: $since, first: 100) {
+                      pageInfo { hasNextPage }
+                      nodes {
+                        oid
+                        messageHeadline
+                        committedDate
+                        author { name }
+                        associatedPullRequests(first: 5) {
+                          nodes { number state }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+          GRAPHQL
+
+          findings=0
+          scanned=0
+          inspected=0
+
+          for repo in ${REPOS}; do
+            inspected=$((inspected + 1))
+            # Failure to read is not a pass. Left unchecked, a transient API
+            # error yields an empty node list, zero findings, and a green tick
+            # over a branch nothing ever looked at.
+            if ! result=$(gh api graphql \
+              -F owner=jdwlabs -F name="${repo}" -F since="${since}" \
+              -F query=@query.graphql); then
+              echo "::error::Cannot read the history of jdwlabs/${repo} — refusing to report a pass without inspecting it."
+              exit 1
+            fi
+
+            branch=$(printf '%s' "${result}" | jq -r '.data.repository.defaultBranchRef.name // empty')
+            if [ -z "${branch}" ]; then
+              echo "::error::jdwlabs/${repo} reported no default branch — the query returned a shape this job cannot interpret."
+              exit 1
+            fi
+
+            truncated=$(printf '%s' "${result}" | jq -r '.data.repository.defaultBranchRef.target.history.pageInfo.hasNextPage')
+            count=$(printf '%s' "${result}" | jq -r '.data.repository.defaultBranchRef.target.history.nodes | length')
+
+            # 100 is the page cap, not a limit on the window. More than that in
+            # seven days is worth saying out loud rather than quietly grading
+            # the portion that happened to fit.
+            if [ "${truncated}" = "true" ]; then
+              echo "::error::jdwlabs/${repo} has more than 100 commits on ${branch} within the window — refusing to report a pass over part of it."
+              echo "Re-run with a shorter 'days' input, or page the query, so every commit in the window is inspected."
+              exit 1
+            fi
+
+            # A commit counts as attributed when at least one pull request it
+            # is associated with actually merged. An open or closed-unmerged
+            # association is not attribution: it describes a proposal, not the
+            # thing that landed.
+            unattributed=$(printf '%s' "${result}" | jq -r '
+              .data.repository.defaultBranchRef.target.history.nodes[]
+              | select([.associatedPullRequests.nodes[].state] | index("MERGED") | not)
+              | [.oid, .committedDate, (.author.name // "unknown"), .messageHeadline]
+              | @tsv')
+
+            scanned=$((scanned + count))
+
+            if [ -z "${unattributed}" ]; then
+              printf '  %-16s %s: %d commit(s), all attributable\n' "${repo}" "${branch}" "${count}"
+              continue
+            fi
+
+            echo
+            echo "jdwlabs/${repo} ${branch} — commits with no merged pull request:"
+            echo
+            while IFS=$'\t' read -r oid committed author subject; do
+              [ -n "${oid}" ] || continue
+              printf '  %s  %s\n' "${oid:0:9}" "${subject}"
+              printf '    committed: %s by %s\n' "${committed}" "${author}"
+              printf '    %s\n' "https://github.com/jdwlabs/${repo}/commit/${oid}"
+              echo
+              findings=$((findings + 1))
+            done <<<"${unattributed}"
+          done
+
+          echo
+          if [ "${findings}" -gt 0 ]; then
+            echo "::error::${findings} commit(s) reached a default branch without a merged pull request — see the list above."
+            echo "Each one is a bypass that was exercised. If it was deliberate, say so on the commit or in"
+            echo "docs/branch-protection-bypass.md; if it was not, the branch protection on that repository did"
+            echo "not do what its ruleset claims. A history rewrite also detaches commits from their pull"
+            echo "requests and will surface here for as many days as the window is long."
+            exit 1
+          fi
+
+          echo "main attribution: ${scanned} commit(s) across ${inspected} repositories, 0 issues — passed"
