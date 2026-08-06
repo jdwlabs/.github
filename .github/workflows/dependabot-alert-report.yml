@@ -1,0 +1,211 @@
+name: Dependabot Alert Report
+
+# The alert backlog has been cleared twice and quietly regenerated twice --
+# both times discovered by accident on a `git push` banner rather than by any
+# mechanism that watches for it. This workflow is that mechanism: a weekly
+# scan of open Dependabot alerts across every repo, diffed against the
+# previous run so a steady count doesn't read the same as a count with new
+# highs, published to one pinned issue that gets edited in place.
+#
+# State (the alert-identity list from the last run) rides a workflow
+# artifact instead of a committed file. This repo's own branch protection
+# (see the rulesets under .github/rulesets) would reject a direct push to
+# main, and a state-bookkeeping commit doesn't earn a pull request of its
+# own every week.
+#
+# Reading Dependabot alerts on apps/platform/infrastructure/deployments from
+# a workflow running in .github needs a token that can see across repos --
+# the default GITHUB_TOKEN a workflow receives is scoped to the repo it runs
+# in and cannot reach any other. DEPENDABOT_REPORT_TOKEN supplies that; the
+# issue read/write below stays on the default token, which already has
+# everything it needs for same-repo issues.
+
+on:
+  schedule:
+    - cron: '0 13 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  actions: read
+
+concurrency:
+  group: dependabot-alert-report
+  cancel-in-progress: false
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Restore previous alert state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p previous state
+          echo '[]' > previous/dependabot-alert-state.json
+
+          prev_run=$(gh run list --repo "$GITHUB_REPOSITORY" \
+            --workflow dependabot-alert-report.yml --status success \
+            --json databaseId --jq '.[0].databaseId // empty')
+
+          if [ -z "$prev_run" ]; then
+            echo "no prior successful run -- starting from empty state"
+          elif gh run download "$prev_run" --repo "$GITHUB_REPOSITORY" \
+              -n dependabot-alert-state -D previous 2>/dev/null; then
+            echo "restored state from run $prev_run"
+          else
+            # First tracked run predates this artifact, or it already expired.
+            # Either way every alert reports as new this once rather than the
+            # job failing outright.
+            echo "run $prev_run has no dependabot-alert-state artifact -- starting from empty state"
+          fi
+
+      # Repos with a real dependency manifest Dependabot can alert on.
+      # .github-private has alerts disabled at the repo level (confirmed via
+      # the API, not assumed) and demo-repository is GitHub's own template,
+      # not a jdwlabs project -- both are deliberately left out, not missed.
+      - name: Fetch open Dependabot alerts across the org
+        env:
+          GH_TOKEN: ${{ secrets.DEPENDABOT_REPORT_TOKEN }}
+        run: |
+          set -euo pipefail
+          # gh api's --jq is a filter string, not a full jq invocation -- it
+          # takes no --arg. The repo name comes from the fixed array below,
+          # never from anything external, so interpolating it straight into
+          # the filter is safe.
+          repos=(apps platform infrastructure deployments .github)
+          : > state/current.ndjson
+          for repo in "${repos[@]}"; do
+            gh api "repos/jdwlabs/${repo}/dependabot/alerts?state=open" --paginate \
+              --jq ".[] | {
+                id: (\"${repo}#\" + (.number | tostring)),
+                repo: \"${repo}\",
+                number: .number,
+                ecosystem: .dependency.package.ecosystem,
+                package: .dependency.package.name,
+                severity: .security_advisory.severity,
+                scope: (.dependency.scope // \"runtime\"),
+                summary: .security_advisory.summary,
+                url: .html_url
+              }" >> state/current.ndjson
+          done
+          jq -s 'sort_by(.id)' state/current.ndjson > state/dependabot-alert-state.json
+          echo "fetched $(jq 'length' state/dependabot-alert-state.json) open alert(s) across ${#repos[@]} repo(s)"
+
+      - name: Diff against previous state and render the report
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          repos=(apps platform infrastructure deployments .github)
+
+          jq -s '
+            (.[0] // []) as $prev | (.[1] // []) as $curr
+            | ($prev | map(.id)) as $prev_ids | ($curr | map(.id)) as $curr_ids
+            | {
+                new: ($curr | map(select(.id as $i | ($prev_ids | index($i)) | not))),
+                resolved: ($prev | map(select(.id as $i | ($curr_ids | index($i)) | not)))
+              }
+          ' previous/dependabot-alert-state.json state/dependabot-alert-state.json > state/diff.json
+
+          {
+            echo "Open Dependabot alerts across jdwlabs, refreshed weekly. Edited in place -- this is always the current count, never a snapshot to scroll past."
+            echo
+            echo "**Last updated:** $(date -u +'%Y-%m-%d %H:%M UTC') ([run]($RUN_URL))"
+            echo
+            echo "## Totals"
+            echo
+            echo "| | critical | high | medium | low | dev-scope | runtime-scope | total |"
+            echo "|---|---:|---:|---:|---:|---:|---:|---:|"
+            jq -r '
+              (map(select(.severity=="critical")) | length) as $c
+              | (map(select(.severity=="high")) | length) as $h
+              | (map(select(.severity=="medium")) | length) as $m
+              | (map(select(.severity=="low")) | length) as $l
+              | (map(select(.scope=="development")) | length) as $d
+              | (map(select(.scope=="runtime")) | length) as $rt
+              | length as $t
+              | "| **all repos** | \($c) | \($h) | \($m) | \($l) | \($d) | \($rt) | \($t) |"
+            ' state/dependabot-alert-state.json
+
+            echo
+            echo "## By repo"
+            echo
+            echo "| repo | critical | high | medium | low | dev-scope | runtime-scope | total |"
+            echo "|---|---:|---:|---:|---:|---:|---:|---:|"
+            for repo in "${repos[@]}"; do
+              jq -r --arg repo "$repo" '
+                map(select(.repo == $repo)) as $r
+                | ($r | map(select(.severity=="critical")) | length) as $c
+                | ($r | map(select(.severity=="high")) | length) as $h
+                | ($r | map(select(.severity=="medium")) | length) as $m
+                | ($r | map(select(.severity=="low")) | length) as $l
+                | ($r | map(select(.scope=="development")) | length) as $d
+                | ($r | map(select(.scope=="runtime")) | length) as $rt
+                | ($r | length) as $t
+                | "| \($repo) | \($c) | \($h) | \($m) | \($l) | \($d) | \($rt) | \($t) |"
+              ' state/dependabot-alert-state.json
+            done
+
+            echo
+            new_count=$(jq '.new | length' state/diff.json)
+            echo "## New since last run ($new_count)"
+            echo
+            if [ "$new_count" -eq 0 ]; then
+              echo "None."
+            else
+              jq -r '.new[] | "- **\(.severity)** \(.repo) / \(.package) (\(.ecosystem), \(.scope)) -- [#\(.number)](\(.url)): \(.summary)"' state/diff.json
+            fi
+
+            echo
+            resolved_count=$(jq '.resolved | length' state/diff.json)
+            echo "## Resolved since last run ($resolved_count)"
+            echo
+            if [ "$resolved_count" -eq 0 ]; then
+              echo "None."
+            else
+              jq -r '.resolved[] | "- \(.repo) / \(.package) (\(.ecosystem)) -- #\(.number)"' state/diff.json
+            fi
+
+            echo
+            echo "---"
+            echo "Generated by [\`dependabot-alert-report.yml\`](${{ github.server_url }}/${{ github.repository }}/blob/main/.github/workflows/dependabot-alert-report.yml). Not a required check -- standalone schedule only, never gates a pull request."
+          } > report.md
+
+          echo "new=$new_count resolved=$resolved_count" >> "$GITHUB_STEP_SUMMARY"
+          cat report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload alert state for next run
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependabot-alert-state
+          path: state/dependabot-alert-state.json
+          retention-days: 90
+
+      - name: Publish to the pinned report issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state all \
+            --search 'Dependabot Alert Report in:title' \
+            --json number,title --jq '[.[] | select(.title == "Dependabot Alert Report")][0].number // empty')
+
+          if [ -n "$existing" ]; then
+            gh issue edit "$existing" --repo "$GITHUB_REPOSITORY" --body-file report.md
+            issue_state=$(gh issue view "$existing" --repo "$GITHUB_REPOSITORY" --json state --jq '.state')
+            if [ "$issue_state" = "CLOSED" ]; then
+              gh issue reopen "$existing" --repo "$GITHUB_REPOSITORY"
+            fi
+            echo "updated issue #$existing"
+          else
+            url=$(gh issue create --repo "$GITHUB_REPOSITORY" \
+              --title "Dependabot Alert Report" \
+              --body-file report.md \
+              --label dependencies --label type:security)
+            echo "created $url"
+          fi
