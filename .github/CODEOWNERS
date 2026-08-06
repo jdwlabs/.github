@@ -1,0 +1,8 @@
+# Last matching pattern wins; keep the catch-all first.
+* @jdwillmsen
+
+# Reusable workflows are consumed by every other repo via @main; changes need owner review.
+/.github/workflows/ @jdwillmsen
+
+# gitleaks.toml is the secret-scanning config consumed by every repo via @main.
+/gitleaks.toml @jdwillmsen
