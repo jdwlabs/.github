@@ -360,6 +360,53 @@ days as the window is long.
 
 ---
 
+## `dependabot-alert-report.yml` — Weekly Dependabot Alert Report
+
+**Not reusable.** Like `main-attribution.yml`, it reads other repositories
+rather than being called by them.
+
+**Trigger:** `schedule` weekly, Mondays at 13:00 UTC, plus `workflow_dispatch`.
+There is no `pull_request` trigger, so it can never become a check that blocks a
+merge.
+
+**What it publishes.** One issue titled `Dependabot Alert Report`, edited in
+place every run — reopened if it was closed, created with the `dependencies` and
+`type:security` labels if it does not exist. The same report goes to the job
+summary. It carries a severity/scope totals table, the same table broken down
+per repo, and two lists: alerts new since the previous run and alerts resolved
+since the previous run.
+
+**Why it exists.** The alert backlog has been cleared twice and quietly
+regenerated twice, both times noticed by accident on a `git push` banner. A flat
+count read the same whether it was steady or refilled with new highs, so the
+report diffs against the previous run rather than restating a total.
+
+**Covers:** `apps`, `platform`, `infrastructure`, `deployments` and this repo.
+`.github-private` has Dependabot alerts disabled at the repo level (confirmed
+against the API, not assumed) and `demo-repository` is GitHub's own template
+rather than a jdwlabs project — both are left out deliberately.
+
+**Secret:** `DEPENDABOT_REPORT_TOKEN`, used only for the cross-repo alert read.
+A workflow's default `GITHUB_TOKEN` is scoped to the repo it runs in and cannot
+see alerts on any other, so the fan-out needs its own token. The issue
+read/write stays on the default token.
+
+**Permissions:** `contents: read`, `issues: write`, `actions: read` — the last
+because the previous run's state is downloaded from that run's artifact.
+
+**State lives in an artifact, not a commit.** The alert-identity list from the
+last run rides the `dependabot-alert-state` artifact (90-day retention). A
+committed state file would need a direct push to `main`, which this repo's own
+rulesets reject, and a weekly bookkeeping commit does not earn a pull request.
+
+| Case | Result |
+| --- | --- |
+| No prior successful run | Starts from empty state; every open alert reports as new, once. |
+| Prior run exists but its artifact expired or predates artifact upload | Same — empty state and a logged reason, rather than failing the job. |
+| Alert count unchanged since last run | Still reports. A steady total with a different set of alerts shows up as non-empty new/resolved lists. |
+
+---
+
 ## Tag Convention
 
 | Repo type | Tag format | Example |
