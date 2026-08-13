@@ -6,6 +6,8 @@ The org-wide meta repository for [jdwlabs](https://github.com/jdwlabs): communit
 
 Changes here reach every other repository. The reusable workflows and `gitleaks.toml` are consumed at `@main`, so a merge takes effect immediately for all callers with no version bump anywhere.
 
+Internal-only counterpart: [`jdwlabs/.github-private`](https://github.com/jdwlabs/.github-private) — org profile content and infrastructure docs that shouldn't be public. GitHub only reads community health files and the profile README from *this* repo, so `.github-private` is never applied as an org-wide fallback.
+
 ## Community health files
 
 | File | Purpose |
