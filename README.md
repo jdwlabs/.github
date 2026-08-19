@@ -34,16 +34,18 @@ Full inputs, callers and behaviour: [`.github/workflows/README.md`](.github/work
 | [`verify-pr-signatures.yml`](.github/workflows/verify-pr-signatures.yml) | Reusable | Fails a pull request carrying any commit GitHub does not report as `verified` |
 | [`main-attribution.yml`](.github/workflows/main-attribution.yml) | Scheduled, local | Daily report of default-branch commits no merged pull request accounts for |
 | [`dependabot-alert-report.yml`](.github/workflows/dependabot-alert-report.yml) | Scheduled, local | Weekly org-wide open Dependabot alert count, diffed against the previous run |
+| [`ruleset-reconcile.yml`](.github/workflows/ruleset-reconcile.yml) | Scheduled, local | Daily report of Baseline rulesets diverging from the org contract; reports only, never applies |
 
 `security-scan-self.yml` and `verify-pr-signatures-self.yml` apply the two gates to this repo by local path, so a pull request changing a gate is checked by its own version rather than by the copy on `main`.
 
-The two scheduled workflows run here and only here — they read other repositories rather than being called by them, and neither has a `pull_request` trigger, so neither can become a check that blocks a merge.
+The three scheduled workflows run here and only here — they read other repositories rather than being called by them, and none has a `pull_request` trigger, so none can become a check that blocks a merge.
 
 ## Org configuration
 
 | Path | Purpose |
 |---|---|
-| [`.github/rulesets/`](.github/rulesets) | Branch rulesets for this repo managed as code — edit the JSON, merge, then run [`apply.sh`](.github/rulesets/apply.sh) |
+| [`.github/rulesets/`](.github/rulesets) | Branch rulesets for this repo managed as code — edit the JSON, merge, then run [`apply.sh`](.github/rulesets/apply.sh). Read [`docs/rulesets.md`](docs/rulesets.md) before renaming a required check |
+| [`.github/rulesets/org-policy.json`](.github/rulesets/org-policy.json) | The contract every repo's Baseline ruleset must satisfy, and the declared exceptions to it |
 | [`.github/CODEOWNERS`](.github/CODEOWNERS) | Review routing; the reusable workflows and `gitleaks.toml` require owner review because every repo consumes them |
 | [`default.json`](default.json) | Org-wide Renovate preset, extended by the other repos as `github>jdwlabs/.github` |
 | [`renovate.json`](renovate.json) | This repo's own Renovate config — action pins for the reusable workflows |
@@ -57,6 +59,7 @@ The two scheduled workflows run here and only here — they read other repositor
 |---|---|
 | [`docs/code-standards.md`](docs/code-standards.md) | Org-wide code quality contract, the gates that enforce it, and when to re-run them |
 | [`docs/code-scanning-strategy.md`](docs/code-scanning-strategy.md) | Tooling evaluation behind the security scan, and why Dependabot fixes stay off |
+| [`docs/rulesets.md`](docs/rulesets.md) | Where rulesets live, the org-wide contract, applying them, and the sequence for renaming a required check |
 | [`docs/branch-protection-bypass.md`](docs/branch-protection-bypass.md) | Why each ruleset bypass exists and what would remove it |
 | [`docs/agentic-operating-model.md`](docs/agentic-operating-model.md) | Identity, review, scaling and safety model for agent-authored change |
 | [`docs/repo-health-visibility.md`](docs/repo-health-visibility.md) | Cross-repo audit and the decision against building a developer portal or dashboard |
