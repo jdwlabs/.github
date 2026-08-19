@@ -407,6 +407,54 @@ rulesets reject, and a weekly bookkeeping commit does not earn a pull request.
 
 ---
 
+## `ruleset-reconcile.yml` — Ruleset Conformance Report
+
+Daily scheduled report (`41 7 * * *`) plus `workflow_dispatch`. Runs
+`tools/check-ruleset-conformance.py` and fails the job on a finding. **It never
+applies a ruleset** — applying needs admin on the target repository and has an
+unenforced window, so the cutover stays a deliberate human action.
+
+**Why it exists.** Rulesets are managed as code in five independent
+per-repository directories, which is correct — required status checks name the
+CI jobs of the repository they protect, and the repositories require between 4
+and 13 different contexts. What was missing was anything comparing them, so
+divergence with nothing to diverge *from* read as five deliberate choices. It is
+not: one repository requires no approving review and one requires branches to be
+up to date, and only one of those has a recorded reason.
+
+**Contract:** [`.github/rulesets/org-policy.json`](../rulesets/org-policy.json).
+Contexts are checked as a superset — extra repository-specific checks are
+conforming. A deliberate divergence is declared there with a mandatory reason and
+the exact value it excuses, so it expires when that value moves.
+
+**Covers:** `apps`, `platform`, `infrastructure`, `deployments` and this repo.
+
+**Two tiers.**
+
+| Tier | Question | Token |
+| --- | --- | --- |
+| committed | Does each checked-in `baseline.json` satisfy the contract? | default `GITHUB_TOKEN`; all five repos are public |
+| live | Does each checked-in `baseline.json` match the ruleset in force? | `RULESET_READ_TOKEN` |
+
+**Secret:** `RULESET_READ_TOKEN` — a classic PAT with `repo` scope from an
+account holding admin on all five repositories. Not yet set, so the live tier is
+skipped; the report prints `LIVE COMPARISON NOT RUN` and the job raises a
+workflow annotation. A tier that did not run is never reported as one that
+passed. Reading rulesets needs repository-admin rights, not `admin:org`.
+
+**Permissions:** `contents: read`.
+
+| Exit | Meaning |
+| --- | --- |
+| 0 | Every baseline satisfies the contract. |
+| 1 | A divergence, a stale exception, or a committed/live mismatch. |
+| 2 | No verdict reached — unreadable policy or an API failure. Reported separately so "the check failed" is never read as "the check found something". |
+
+Full background, the apply procedure and the required-check rename sequence:
+[`docs/rulesets.md`](../../docs/rulesets.md).
+
+---
+
 ## Tag Convention
 
 | Repo type | Tag format | Example |
