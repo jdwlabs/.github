@@ -1,0 +1,36 @@
+{
+  "note": "The org-wide contract every repository's Baseline ruleset must satisfy. Rulesets themselves are per-repository and stay that way; this file is what makes them comparable. JSON carries no comments, so the reasoning lives in docs/rulesets.md — read it before editing anything here.",
+  "docs": "docs/rulesets.md",
+  "owner": "jdwlabs",
+  "repos": ["apps", "deployments", "infrastructure", "platform", ".github"],
+  "baseline": {
+    "path": ".github/rulesets/baseline.json",
+    "ruleset_name": "Baseline",
+    "ref": "refs/heads/main"
+  },
+  "requirements": {
+    "min_required_approving_review_count": 1,
+    "strict_required_status_checks_policy": false,
+    "required_rule_types": [
+      "pull_request",
+      "deletion",
+      "non_fast_forward",
+      "required_linear_history",
+      "required_status_checks"
+    ],
+    "required_status_check_contexts": [
+      "scan / scan",
+      "scan / gitleaks",
+      "scan / binaries",
+      "signatures / signatures"
+    ]
+  },
+  "exceptions": [
+    {
+      "repo": "deployments",
+      "requirement": "min_required_approving_review_count",
+      "observed": 0,
+      "reason": "Set to 0 by deployments PR #110 (ci(rulesets): let the release bot merge its own appVersion bumps, merged 2026-08-02), together with a CODEOWNERS that deliberately has no catch-all, so the release bot can merge the chart bumps it opens. Raising it to 1 would stall that pipeline. Closes when release versions no longer arrive as bot-merged pull requests, or when a second reviewer exists; platform docs/adr/0018-agentic-app-topology.md section 1 has the full history and reads the surrounding App bypass as vestigial."
+    }
+  ]
+}
