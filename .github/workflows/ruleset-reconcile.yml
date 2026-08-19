@@ -1,0 +1,127 @@
+name: Ruleset Reconcile (report only)
+
+# Reports repositories whose Baseline ruleset diverges from the org contract in
+# .github/rulesets/org-policy.json, and — where it can see them — repositories
+# whose live ruleset is not what their committed JSON says.
+#
+# It never applies anything. Applying a ruleset needs admin on the target
+# repository, and the sequence for changing a required check has a window in
+# which those checks are not enforced (docs/rulesets.md), so the cutover is a
+# deliberate human action and not something a cron should start.
+#
+# Why this exists at all: rulesets are managed as code in five independent
+# per-repository directories, which is the right shape — required status checks
+# name the CI jobs of the repository they protect. What was missing was anything
+# that compared them. Divergence with nothing to diverge *from* reads as five
+# deliberate choices, and it is not: one repository requires no approving review
+# and one requires branches to be up to date, and only one of those has a
+# recorded reason. This job makes an undeclared divergence impossible to mistake
+# for a decision.
+#
+# Two tiers, because they need different tokens:
+#
+#   * committed — every repository here is public, so the default GITHUB_TOKEN
+#     reads each checked-in baseline.json. This tier always runs.
+#   * live — comparing the JSON against the ruleset actually in force needs a
+#     token with admin read on each repository, which a workflow's own
+#     GITHUB_TOKEN is not: it is scoped to the repository it runs in and answers
+#     404 for every other repository's rulesets. Set RULESET_READ_TOKEN (a
+#     classic PAT with `repo`, held by an account with admin on all five) to
+#     turn it on. Until then the tier is skipped, and both the report and a
+#     workflow annotation say so — a tier that did not run is never reported as
+#     a tier that passed.
+#
+# The live tier is the one that catches what the manual apply model creates: a
+# merged JSON edit that nobody applied is enforcing nowhere. Not hypothetical —
+# platform's committed baseline requires a context its live ruleset does not.
+#
+# Findings reach the Actions tab and nowhere else today. That is the same
+# audience problem the org has hit before, and routing this to Alertmanager
+# alongside the other scheduled reports is the obvious follow-up once the
+# notification helper has an org-wide home rather than living in one repo.
+
+on:
+  schedule:
+    # Daily, off the hour and clear of main-attribution (17 13) and
+    # dependabot-alert-report (0 13 Mon) so a slow API day cannot make three
+    # cross-repo fan-outs contend for the same rate limit window.
+    - cron: '41 7 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reconcile:
+    name: Report ruleset divergence
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      # No setup-python step: the checker is standard-library only, so the
+      # runner's python3 is enough and there is one less thing to pin.
+      - name: Check every baseline against the org contract
+        id: report
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Empty when the secret is not set, which the checker reads as "no
+          # live tier" rather than as a failure.
+          RULESET_READ_TOKEN: ${{ secrets.RULESET_READ_TOKEN }}
+        run: |
+          set -uo pipefail
+          # `|| status=$?` rather than a pipeline: the default shell runs with
+          # -e, so letting a non-zero verdict abort the step here would skip the
+          # report it just produced and leave the job red with nothing in it.
+          status=0
+          python3 tools/check-ruleset-conformance.py > report.txt 2>&1 || status=$?
+          cat report.txt
+          {
+            echo "### Ruleset conformance"
+            echo
+            echo '```'
+            cat report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          # 2 and above mean no verdict was reached, which is a different
+          # failure from a repository having diverged. The step itself stays
+          # green either way so the summary is written before the job ends.
+          case "$status" in
+            0) outcome=conforming ;;
+            1) outcome=diverged ;;
+            *) outcome=no-verdict ;;
+          esac
+          echo "outcome=$outcome" >> "$GITHUB_OUTPUT"
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+
+      - name: Fail on a finding
+        # always(): an empty outcome means the report step never ran at all,
+        # which is itself a check that reached no verdict.
+        if: always()
+        env:
+          OUTCOME: ${{ steps.report.outputs.outcome }}
+          STATUS: ${{ steps.report.outputs.status }}
+        run: |
+          set -uo pipefail
+          if [ -f report.txt ] && grep -q 'LIVE COMPARISON NOT RUN' report.txt; then
+            echo "::warning::Only the committed baselines were checked. Set the RULESET_READ_TOKEN secret to compare them against the rulesets actually in force — see docs/rulesets.md."
+          fi
+
+          case "${OUTCOME:-}" in
+            conforming)
+              echo "0 issues — every baseline satisfies the contract in .github/rulesets/org-policy.json."
+              ;;
+            diverged)
+              echo "::error::A repository's Baseline ruleset diverges from the org contract — see the report above."
+              echo "Each finding is either a value to correct in that repository's .github/rulesets/baseline.json,"
+              echo "or a decision to declare as an exception with its reason in .github/rulesets/org-policy.json."
+              echo "Applying a corrected ruleset is a human step: docs/rulesets.md has the sequence."
+              exit 1
+              ;;
+            *)
+              echo "::error::tools/check-ruleset-conformance.py exited ${STATUS:-<never ran>} without a verdict — see the log above."
+              echo "Nothing is comparing the rulesets until this runs again cleanly."
+              exit 1
+              ;;
+          esac
