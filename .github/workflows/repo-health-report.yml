@@ -1,0 +1,275 @@
+name: Repo Health Report
+
+# The org's cross-repo health signal already exists — it is just scattered.
+# Five scheduled jobs each answer one question well and each publish
+# somewhere only their own author reliably opens: four of five write only to
+# a job's step summary, and even the one durable surface (the Dependabot
+# report's own pinned issue) sits in isolation from the rest. This job does
+# not replace any of them — each keeps failing its own run, gating nothing,
+# and alerting through Alertmanager exactly as it does today. It adds the
+# missing sink: one pinned issue, edited in place, that answers "is anything
+# red, and for how long" without opening five separate Actions tabs.
+#
+# docs/repo-health-visibility.md (JDWLABS-347) is the design this follows.
+# Its §3 names four reporters; ruleset-reconcile.yml landed the day after
+# that audit and has the exact same nobody-opens-the-summary problem, so it
+# is folded in here as a fifth source rather than left out on a technicality.
+#
+# What "consecutive failures" means below: each source workflow's own last
+# step already turns the job red only on a reportable finding or a run that
+# reached no verdict at all — never on the source repository's ordinary CI
+# noise. So a run's conclusion is already the signal this report needs; it is
+# read from workflow-run history, not recomputed. A source that has been red
+# for one run just broke or found something new. A source red for a week is
+# a standing condition someone already knows about (or one the reader now
+# gets a chance to notice for the first time) — the distinction the design
+# doc's §9 calls out as `prd-drift.yml`'s exact ambiguity.
+#
+# Cross-repo Actions run history needs a token that can see `platform` and
+# `deployments`, which the default GITHUB_TOKEN issued to a run in this repo
+# cannot. jdwlabs-agent-bot is already installed org-wide and already mints
+# this exact shape of token for the same reason in
+# platform/.github/workflows/audit-admin-bypass.yml — reused here rather than
+# adding a second cross-repo credential. Reading this repo's own three
+# workflows (main-attribution, dependabot-alert-report, ruleset-reconcile)
+# and the pinned issue itself uses the default token, which already has
+# everything it needs for same-repo work.
+
+on:
+  schedule:
+    # Clear of every source this report reads: prd-drift (23 6), ruleset-
+    # reconcile (41 7), audit-admin-bypass (0 12), main-attribution (17 13),
+    # dependabot-alert-report (0 13 Mon). 14:30 UTC daily is always after all
+    # five, including the weekly Monday one.
+    - cron: '30 14 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  actions: read
+
+concurrency:
+  group: repo-health-report
+  cancel-in-progress: false
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # jdwlabs-agent-bot, scoped read-only to the two repos this repo's own
+      # token cannot reach. Same App, same secrets as audit-admin-bypass.yml —
+      # not a new credential.
+      - name: Generate cross-repo read token
+        id: bot-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.AGENT_APP_ID }}
+          private-key: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+          owner: jdwlabs
+          repositories: platform,deployments
+
+      - name: Collect status from every source workflow
+        id: collect
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BOT_TOKEN: ${{ steps.bot-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p state
+
+          # Walks the most recent completed runs of one workflow, newest
+          # first (the API's default order), and reports:
+          #   - the latest conclusion
+          #   - how many consecutive runs from the newest have been failures
+          #   - the timestamp of the most recent success, if any is in window
+          #   - the newest run's URL
+          #
+          # 30 runs is a window, not a promise the streak ends there. A
+          # streak that fills the whole window is reported as "30+" rather
+          # than as an exact count the fetch never actually confirmed — the
+          # same refusal to round a truncated read down to a false precision
+          # that main-attribution.yml applies to its own page cap.
+          collect_one() {
+            local repo="$1" workflow="$2" token="$3"
+            local runs
+            runs=$(GH_TOKEN="$token" gh api \
+              "repos/jdwlabs/${repo}/actions/workflows/${workflow}/runs" \
+              -X GET -f status=completed -f branch=main -f per_page=30 \
+              --jq '[.workflow_runs[] | {conclusion, created_at, html_url}]')
+
+            local count
+            count=$(printf '%s' "$runs" | jq 'length')
+            if [ "$count" -eq 0 ]; then
+              jq -n --arg repo "$repo" --arg workflow "$workflow" \
+                '{repo: $repo, workflow: $workflow, conclusion: "unknown", streak: 0, streak_capped: false, last_success: null, url: null}'
+              return
+            fi
+
+            printf '%s' "$runs" | jq --arg repo "$repo" --arg workflow "$workflow" '
+              (.[0].conclusion) as $latest
+              | (.[0].html_url) as $url
+              | (reduce .[] as $r ({streak: 0, done: false};
+                  if .done then .
+                  elif $r.conclusion == "failure" then {streak: (.streak + 1), done: false}
+                  else {streak: .streak, done: true}
+                  end
+                ) | .streak) as $streak
+              | ((map(select(.conclusion == "success")) | .[0].created_at) // null) as $last_success
+              | {
+                  repo: $repo,
+                  workflow: $workflow,
+                  conclusion: $latest,
+                  streak: $streak,
+                  streak_capped: ($streak == (length) and $latest == "failure"),
+                  last_success: $last_success,
+                  url: $url
+                }
+            '
+          }
+
+          {
+            collect_one ".github"     "main-attribution.yml"   "$GH_TOKEN"
+            collect_one ".github"     "ruleset-reconcile.yml"  "$GH_TOKEN"
+            collect_one "platform"    "audit-admin-bypass.yml" "$BOT_TOKEN"
+            collect_one "deployments" "prd-drift.yml"          "$BOT_TOKEN"
+          } > state/sources.ndjson
+          jq -s '.' state/sources.ndjson > state/sources.json
+          echo "collected $(jq 'length' state/sources.json) source(s)"
+
+      - name: Pull the Dependabot report's current totals
+        id: dependabot
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # The Dependabot report already carries its own diffed, dated
+          # totals in its own pinned issue — this reads that issue's current
+          # body rather than re-implementing the alert fetch and diff a
+          # second time. A parse failure degrades to "see the linked issue"
+          # rather than failing this job; the source of truth stays that
+          # issue either way.
+          number=$(gh issue list --repo jdwlabs/.github --state all \
+            --search 'Dependabot Alert Report in:title' \
+            --json number,title --jq '[.[] | select(.title == "Dependabot Alert Report")][0].number // empty')
+
+          echo "issue_number=${number}" >> "$GITHUB_OUTPUT"
+
+          if [ -z "$number" ]; then
+            echo "totals_row=not yet published" >> "$GITHUB_OUTPUT"
+            echo "updated=unknown" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          body=$(gh issue view "$number" --repo jdwlabs/.github --json body --jq '.body')
+          totals_row=$(printf '%s\n' "$body" | grep -m1 '\*\*all repos\*\*' || true)
+          updated=$(printf '%s\n' "$body" | grep -m1 '^\*\*Last updated:\*\*' || true)
+
+          {
+            echo "totals_row<<TOTALS_EOF"
+            if [ -n "$totals_row" ]; then echo "$totals_row"; else echo "| **all repos** | unable to parse — see the linked issue |"; fi
+            echo "TOTALS_EOF"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "updated<<UPDATED_EOF"
+            if [ -n "$updated" ]; then echo "$updated"; else echo "unknown"; fi
+            echo "UPDATED_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Render the report
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          DEPENDABOT_ISSUE: ${{ steps.dependabot.outputs.issue_number }}
+          DEPENDABOT_TOTALS: ${{ steps.dependabot.outputs.totals_row }}
+          DEPENDABOT_UPDATED: ${{ steps.dependabot.outputs.updated }}
+        run: |
+          set -euo pipefail
+
+          streak_note() {
+            local conclusion="$1" streak="$2" capped="$3"
+            if [ "$conclusion" = "unknown" ]; then
+              echo "no completed run found on \`main\`"
+              return
+            fi
+            if [ "$conclusion" != "failure" ]; then
+              echo "clean"
+              return
+            fi
+            if [ "$capped" = "true" ]; then
+              echo "**${streak}+ consecutive failures**"
+            elif [ "$streak" -eq 1 ]; then
+              echo "**1 consecutive failure** (just turned red)"
+            else
+              echo "**${streak} consecutive failures**"
+            fi
+          }
+
+          {
+            echo "One glanceable rollup of the org's scheduled cross-repo health checks. Edited in place — this is always the current state, never a snapshot to scroll past. Each source keeps failing its own run and alerting independently exactly as it did before this report existed; nothing here gates anything."
+            echo
+            echo "**Last updated:** $(date -u +'%Y-%m-%d %H:%M UTC') ([run]($RUN_URL))"
+            echo
+            echo "## Scheduled checks"
+            echo
+            echo "| source | repo | latest run | status |"
+            echo "|---|---|---|---|"
+
+            jq -r '.[] | [.repo, .workflow, .conclusion, .streak, .streak_capped, .url] | @tsv' state/sources.json |
+            while IFS=$'\t' read -r repo workflow conclusion streak capped url; do
+              note=$(streak_note "$conclusion" "$streak" "$capped")
+              link="${url:-no completed run}"
+              echo "| [\`${workflow}\`](https://github.com/jdwlabs/${repo}/blob/main/.github/workflows/${workflow}) | ${repo} | [latest](${link}) | ${note} |"
+            done
+
+            echo
+            echo "## Dependabot alerts"
+            echo
+            if [ -n "$DEPENDABOT_ISSUE" ]; then
+              echo "Full breakdown, diffed weekly: [#${DEPENDABOT_ISSUE}](https://github.com/jdwlabs/.github/issues/${DEPENDABOT_ISSUE}) (updated ${DEPENDABOT_UPDATED#\*\*Last updated:\*\* })"
+              echo
+              echo "| | critical | high | medium | low | dev-scope | runtime-scope | total |"
+              echo "|---|---:|---:|---:|---:|---:|---:|---:|"
+              echo "$DEPENDABOT_TOTALS"
+            else
+              echo "No Dependabot Alert Report issue found yet — it publishes weekly and creates itself on first run."
+            fi
+
+            echo
+            echo "## Known gaps this report does not close"
+            echo
+            echo "Tracked in [docs/repo-health-visibility.md](https://github.com/jdwlabs/.github/blob/main/docs/repo-health-visibility.md) §9, not re-litigated here on every run:"
+            echo
+            echo "- **Per-repo required checks and branch-currency policy** — \`ruleset-reconcile.yml\` (above) reports committed-baseline divergence against \`.github/rulesets/org-policy.json\`; applying a corrected ruleset stays a deliberate human step (see \`docs/rulesets.md\`), not something this report or that job does automatically."
+            echo "- **A written coverage decision** — four repositories independently run tests with no coverage floor and no recorded reason. Still undecided."
+            echo "- **Action pins by SHA** — in progress repo by repo; this workflow's own action is pinned as the first instance of the pattern."
+            echo
+            echo "---"
+            echo "Generated by [\`repo-health-report.yml\`](${{ github.server_url }}/${{ github.repository }}/blob/main/.github/workflows/repo-health-report.yml). Not a required check — standalone schedule only, never gates a pull request."
+          } > report.md
+
+          cat report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish to the pinned report issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state all \
+            --search 'Repo Health Report in:title' \
+            --json number,title --jq '[.[] | select(.title == "Repo Health Report")][0].number // empty')
+
+          if [ -n "$existing" ]; then
+            gh issue edit "$existing" --repo "$GITHUB_REPOSITORY" --body-file report.md
+            issue_state=$(gh issue view "$existing" --repo "$GITHUB_REPOSITORY" --json state --jq '.state')
+            if [ "$issue_state" = "CLOSED" ]; then
+              gh issue reopen "$existing" --repo "$GITHUB_REPOSITORY"
+            fi
+            echo "updated issue #$existing"
+          else
+            url=$(gh issue create --repo "$GITHUB_REPOSITORY" \
+              --title "Repo Health Report" \
+              --body-file report.md \
+              --label type:ci --label type:infra)
+            echo "created $url"
+          fi
