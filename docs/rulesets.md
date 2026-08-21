@@ -106,9 +106,10 @@ target repository.
 
 ```bash
 ./apply.sh                                    # this checkout's repo, this directory
-./apply.sh --dry-run                          # print what would change, write nothing
+./apply.sh --dry-run                          # diff every export against live, write nothing
 ./apply.sh --repo jdwlabs/platform --dir ../../../platform/.github/rulesets
 ./apply.sh --all --workspace ~/projects/jdwlabs
+./apply.sh --allow-weakening                  # required.status_checks/approvals/rules would decrease
 ```
 
 The target repository is read from the checkout's `origin` remote, so a bare
@@ -117,20 +118,35 @@ The target repository is read from the checkout's `origin` remote, so a bare
 with `--repo` and `--dir` one copy drives all of them, and the other four are
 redundant.
 
-Three behaviours worth knowing:
+Five behaviours worth knowing:
 
+- **The whole run is planned before anything is written.** Every export is
+  parsed, matched against the live ruleset, and diffed before the first `PUT`
+  or `POST` fires; any refusal aborts the run before it writes anything. A run
+  that stopped halfway through would leave some repositories reconciled and
+  others not, which is the state hardest to notice and hardest to undo.
+- **`--dry-run` diffs against live, not just against the last apply.** It pulls
+  the ruleset currently in force and shows a unified diff of what would change,
+  so it also catches drift nobody applied — an export that already matches live
+  is reported `unchanged` and skipped rather than rewritten.
+- **A weakening is refused unless `--allow-weakening` says it is deliberate.**
+  Removing a required status check, lowering the approval count, dropping a
+  rule, or turning enforcement off all count. Step 1 of the rename sequence
+  below is exactly this, which is why the flag exists — it turns "someone forgot
+  a context was still required" into "someone typed the flag that says this is
+  on purpose."
 - **Cross-repository applies are refused.** Every export records the repository
   it came from in `source`, and applying it anywhere else stops the run rather
   than skipping the file. `--force` overrides, for the rare case where replacing
   another repository's rules genuinely is the intent.
 - **`--all` never broadcasts.** It walks a workspace of checkouts and applies
   each repository's *own* `.github/rulesets` directory to that repository.
-- **Matching is id, then name, then create.** The `id` embedded in an export
-  belongs to the repository it was exported from. If that id is not live on the
-  target, the script looks for a ruleset with the same `name` and updates that
-  instead. Without the name step, applying a file whose ids the target does not
-  carry would create a *second* "Baseline" alongside the existing one and leave
-  both enforcing.
+  Matching is id, then name, then create: the `id` embedded in an export
+  belongs to the repository it was exported from, so if that id is not live on
+  the target the script falls back to a ruleset with the same `name` before
+  creating — without the name step, applying a file whose ids the target does
+  not carry would create a *second* "Baseline" alongside the existing one and
+  leave both enforcing.
 
 ## Renaming a required check
 
@@ -146,9 +162,12 @@ broken window:
 
 The supported sequence needs a person with admin at steps 1 and 3:
 
-1. **Apply** with the doomed contexts removed from `required_status_checks`.
+1. **Apply** with the doomed contexts removed from `required_status_checks`
+   (`./apply.sh --allow-weakening` — removing a required check is exactly the
+   weakening the script otherwise refuses).
 2. **Merge** the workflow pull request that renames the jobs.
-3. **Apply** again with the new contexts required.
+3. **Apply** again with the new contexts required — no flag needed, since
+   adding a required check only strengthens the ruleset.
 
 Between 1 and 3 those checks are not enforced. Keep the window short, and hold
 other merges across it.
