@@ -63,3 +63,4 @@ The three scheduled workflows run here and only here — they read other reposit
 | [`docs/branch-protection-bypass.md`](docs/branch-protection-bypass.md) | Why each ruleset bypass exists and what would remove it |
 | [`docs/agentic-operating-model.md`](docs/agentic-operating-model.md) | Identity, review, scaling and safety model for agent-authored change |
 | [`docs/repo-health-visibility.md`](docs/repo-health-visibility.md) | Cross-repo audit and the decision against building a developer portal or dashboard |
+| [`docs/ci-standards.md`](docs/ci-standards.md) | Full workflow inventory, identity/token attribution, legacy-workflow verdicts, and the Scorecard baseline |
