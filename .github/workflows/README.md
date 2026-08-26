@@ -63,7 +63,7 @@ jobs:
 
 Packages a Helm chart on tag push, creates a GitHub release with the `.tgz` attached, and updates the gh-pages Helm repo index.
 
-**Trigger:** `push: tags: ['*-v[0-9]*']` (e.g. `tenant-envelope-v1.0.1`)
+**Trigger:** `push: tags: ['*-[0-9]*.[0-9]*.[0-9]*']` (e.g. `tenant-envelope-1.0.1`)
 
 **Inputs:**
 
@@ -72,7 +72,7 @@ Packages a Helm chart on tag push, creates a GitHub release with the `.tgz` atta
 | `charts-dir` | Yes | — | Directory containing chart subdirectories (`helm-charts` or `charts`) |
 | `pages-url` | Yes | — | GitHub Pages base URL for Helm index (e.g. `https://jdwlabs.github.io/platform`) |
 
-**Tag format:** `{chart-name}-v{MAJOR}.{MINOR}.{PATCH}` — the workflow parses the component name and version from the tag automatically.
+**Tag format:** `{chart-name}-{MAJOR}.{MINOR}.{PATCH}` — no `v` prefix on the version segment. This is the permanent convention for Helm chart tags in this org, matching `helm/chart-releaser`'s default `--release-name-template` (`{{ .Name }}-{{ .Version }}`), the de facto standard tool for Helm chart GitHub releases. The workflow parses the component name and version from the tag automatically.
 
 **Example caller:**
 
@@ -83,7 +83,7 @@ name: Release Chart
 on:
   push:
     tags:
-      - '*-v[0-9]*'
+      - '*-[0-9]*.[0-9]*.[0-9]*'
 
 permissions:
   contents: write
@@ -461,5 +461,6 @@ Full background, the apply procedure and the required-check rename sequence:
 |---|---|---|
 | Single-artifact | `v{MAJOR}.{MINOR}.{PATCH}` | `v1.5.2` |
 | Monorepo component | `{component}-v{MAJOR}.{MINOR}.{PATCH}` | `usersui-v1.3.6` |
+| Helm chart | `{component}-{MAJOR}.{MINOR}.{PATCH}` | `tenant-envelope-1.0.0` |
 
-All tags include the `v` prefix on the version segment. See org-level rulesets for tag protection rules.
+All tags include the `v` prefix on the version segment, except Helm chart tags, which permanently omit it to match `helm/chart-releaser`'s default `--release-name-template` (`{{ .Name }}-{{ .Version }}`) — the de facto standard for Helm chart GitHub releases. See org-level rulesets for tag protection rules.
