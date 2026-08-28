@@ -1,0 +1,92 @@
+name: Update Chart Index Page
+
+# Reusable job behind the platform and deployments update-pages callers,
+# which were byte-identical apart from comments. Callers own the
+# workflow_run trigger, the success-conclusion guard, and the
+# gh-pages-write concurrency group — none of those evaluate correctly from
+# inside a workflow_call job.
+
+on:
+  workflow_call:
+    secrets:
+      RELEASE_APP_ID:
+        description: >-
+          Release App id; optional. Absent, the job falls back to
+          GITHUB_TOKEN and the github-actions[bot] identity.
+        required: false
+      RELEASE_APP_PRIVATE_KEY:
+        description: >-
+          Release App private key; optional, paired with RELEASE_APP_ID.
+        required: false
+
+jobs:
+  update-index:
+    runs-on: ubuntu-latest
+    # contents: write is only exercised on the fallback path — with App
+    # credentials present, the push runs under the minted token instead.
+    permissions:
+      contents: write
+    steps:
+      - name: Detect Release App credentials
+        id: creds
+        env:
+          APP_ID: ${{ secrets.RELEASE_APP_ID }}
+          APP_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+        run: |
+          if [ -n "$APP_ID" ] && [ -n "$APP_KEY" ]; then
+            echo "has-app=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has-app=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::RELEASE_APP_ID / RELEASE_APP_PRIVATE_KEY are not configured; committing as github-actions[bot] via GITHUB_TOKEN."
+          fi
+
+      - name: Generate index bot token
+        id: bot-token
+        if: ${{ steps.creds.outputs.has-app == 'true' }}
+        uses: actions/create-github-app-token@v3.2.0
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          # The App is installed org-wide, so omitting owner/repositories
+          # mints a token valid across every repo in the org. Scope it to
+          # the calling repo and to the one permission the push needs.
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+
+      # No fetch-depth override: generate-index.py reads Chart.yaml files
+      # from the working tree only, so the default shallow clone suffices.
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: gh-pages
+          path: gh-pages
+          # Persisted credentials from this checkout are what the push
+          # below authenticates with; empty when no App creds, which the
+          # || falls through to the default token.
+          token: ${{ steps.bot-token.outputs.token || github.token }}
+
+      - name: Install dependencies
+        # Pinned, not "pip install PyYAML" against whatever resolves that day.
+        run: pip install PyYAML==6.0.3
+
+      - name: Generate index.html
+        run: python3 tools/generate-index.py
+
+      - name: Push index.html to gh-pages
+        env:
+          HAS_APP: ${{ steps.creds.outputs.has-app }}
+        run: |
+          cp index.html gh-pages/index.html
+          cd gh-pages
+          if [ "$HAS_APP" = "true" ]; then
+            git config user.name "jdwlabs-release-bot[bot]"
+            git config user.email "294056722+jdwlabs-release-bot[bot]@users.noreply.github.com"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+          fi
+          git add index.html
+          git diff --cached --quiet || git commit -m "docs: regenerate chart index page [skip ci]"
+          git push
