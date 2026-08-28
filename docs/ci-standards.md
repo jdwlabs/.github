@@ -55,19 +55,20 @@ reconcile back to.
 | File | Trigger | Purpose | Cadence / last run | Modified |
 |---|---|---|---|---|
 | `agent-identity.yml` | `pull_request` | Same co-authorship tripwire | Every PR; 2026-08-21 success | 08-19 |
-| `bootstrap.yml` | `push`/`pull_request`(main), `paths: bootstrap/**, terraform/terraform.tfvars.example` | Lint/vet/test/build the `bootstrap/` Go module; checksum-verified install of sops/age/talosctl; Talos machine-config validation | Bursty, path-gated; 2026-08-19 success | 08-19 |
+| `bootstrap.yml` | `push`/`pull_request`(main), `paths: bootstrap/**, terraform/terraform.tfvars.example, .github/workflows/bootstrap.yml` | Lint/vet/test/build the `bootstrap/` Go module; checksum-verified install of sops/age/talosctl; Talos machine-config validation | Bursty, path-gated; 2026-08-19 success | 08-19 |
 | `release.yml` | `push` tags `v*` | Cross-platform `talops` binary release + checksums | ~Monthly Apr–May 2026, idle since; last 2026-05-25 success | 08-17 |
 | `security-scan.yml` | `pull_request`, `push`(main, docs-excluded) | Reusable scan caller | Continuous; 2026-08-21 success | 08-17 |
-| `terraform.yml` | `push`/`pull_request`(main), `paths: terraform/**` | `terraform fmt -check` / `init` / `validate` | Path-gated, moderate; 2026-08-19 success | 08-17 |
+| `terraform.yml` | `push`/`pull_request`(main), `paths: terraform/**, .github/workflows/terraform.yml` | `terraform fmt -check` / `init` / `validate` | Path-gated, moderate; 2026-08-19 success | 08-17 |
 | `verify-pr-signatures.yml` | `pull_request` | Reusable signature-gate caller | Every PR; 2026-08-21 success | 07-31 |
 
-**`bootstrap.yml`'s `paths:` filter excludes `.github/workflows/**`** — a change
-to the workflow file itself, including its checksum-pinned tool installs,
-does not trigger the workflow to test itself. Already surfaced and exercised
-by hand once (a forced run with throwaway commits covering both the
-cache-hit and cache-miss paths). `terraform.yml` has the identical shape at
-lower stakes — its own logic is fmt/validate only, no checksum pinning to
-silently break.
+**`bootstrap.yml`'s `paths:` filter excluded its own file** — a change to the
+workflow itself, including its checksum-pinned tool installs, did not
+trigger the workflow to test itself. Already surfaced and exercised by hand
+once (a forced run with throwaway commits covering both the cache-hit and
+cache-miss paths). `terraform.yml` had the identical shape at lower stakes —
+its own logic is fmt/validate only, no checksum pinning to silently break.
+Both now carry their own `.github/workflows/<file>.yml` in the filter (the
+sweep this finding fed into — see §7).
 
 ### `platform`
 
@@ -254,3 +255,50 @@ successors are for. Revisit the cadence itself under the same trigger
 `docs/repo-health-visibility.md` §9 already names for reconsidering a
 heavier tooling build: a second human maintainer with write access joining
 the org.
+
+## 7. Paths-filter self-test policy
+
+A `paths:`/`paths-ignore:` filter that never matches the workflow's own
+file means an edit to that workflow — including a bug in it — merges with
+zero CI signal on the PR that introduced it. `infrastructure/bootstrap.yml`
+proved this isn't theoretical: a checksum-verification and caching change
+to the workflow itself passed its PR untested (the filter was
+`bootstrap/**` only) and broke on the very next run, restoring the cache as
+the unprivileged runner user while the install step wrote via `sudo`. Only
+a forced manual run caught it before it reached `main`.
+
+**Default: a workflow using an allowlist `paths:` filter includes its own
+`.github/workflows/<file>.yml` in that filter.** This is a mechanical,
+low-risk addition — it doesn't loosen the filter for anything else, it just
+means editing the workflow is itself a matching change. Swept and applied
+across the org 2026-08-28: `infrastructure/terraform.yml` and
+`infrastructure/bootstrap.yml` were the only two workflows with an
+allowlist `paths:` filter missing this; both now carry it. No other
+workflow in the five-repo inventory in §1 uses an allowlist `paths:`
+filter as of this sweep.
+
+`paths-ignore:` (a denylist, used only for the `**/*.md`/`docs/**`
+doc-skip in every repo's `security-scan.yml`) doesn't have this failure
+mode by construction: it excludes a *push* only when every changed file
+matches the ignore list, and a workflow YAML change never matches
+`**/*.md` or `docs/**`, so editing any of those workflows already
+re-triggers them. No action needed there, and none is expected as new
+`paths-ignore:` filters are added, provided the ignored patterns stay
+scoped to non-workflow paths.
+
+**Exception: a workflow may omit its own path from an allowlist filter
+only with a written reason next to the filter**, covering why re-running
+on a self-edit wouldn't test anything real, and what forced-run procedure
+(`workflow_dispatch`, or a throwaway commit under the watched path) covers
+it instead before merging a change to that workflow. No workflow in the
+inventory currently claims this exception — the two `paths:` cases found
+were both omissions, not deliberate exemptions, which is why both were
+fixed rather than documented as exceptions.
+
+**Out of scope for this policy, by construction, not by filter choice:**
+`workflow_run`-triggered workflows (`update-pages.yml` in `platform` and
+`deployments`) can't self-test regardless of any `paths:` filter — they
+don't run on push or pull_request at all, only after another workflow
+completes. §3 already carries their verdict (dead pending the `release.yml`
+tag-pattern fix, not a filter problem); this policy doesn't add a second,
+competing requirement for them.
