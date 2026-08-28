@@ -101,6 +101,44 @@ jobs:
 
 ---
 
+## `update-pages.yml` — Chart Index Page Update
+
+Regenerates the caller's Helm repo `index.html` (via the caller's
+`tools/generate-index.py`) and pushes it to `gh-pages`.
+
+**Trigger:** `workflow_run` on the caller's Release Chart workflow. The
+caller owns the trigger, the `conclusion == 'success'` guard, and the
+`gh-pages-write` concurrency group — none of those evaluate correctly from
+inside a `workflow_call` job.
+
+**Secrets (both optional, passed explicitly — not `inherit`):**
+
+| Secret | Description |
+|---|---|
+| `RELEASE_APP_ID` | Release App id. With both secrets present, the push runs under a minted App token scoped to the calling repo and commits as `jdwlabs-release-bot[bot]`. |
+| `RELEASE_APP_PRIVATE_KEY` | Release App private key, paired with the id. |
+
+Absent App credentials, the job falls back to `GITHUB_TOKEN` and the
+`github-actions[bot]` identity, with a run-log notice.
+
+**Example caller:**
+
+```yaml
+jobs:
+  update-index:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    uses: jdwlabs/.github/.github/workflows/update-pages.yml@main
+    permissions:
+      contents: write
+    secrets:
+      RELEASE_APP_ID: ${{ secrets.RELEASE_APP_ID }}
+      RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+```
+
+**Used by:** `platform`, `deployments`
+
+---
+
 ## `release-container.yml` — Container Image Release
 
 Builds a multi-arch container image, pushes to a registry, and creates a GitHub release with auto-generated changelog.
