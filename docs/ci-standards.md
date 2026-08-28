@@ -173,33 +173,45 @@ Two things this document adds on top of that baseline, both visible only
 from the full workflow inventory rather than from Scorecard's per-repo
 scan:
 
-- **The floating-reference finding is org-wide, not per-repo.** Every
-  delivery repo calls this repo's reusable workflows at `@main`, and
-  `security-scan.yml` and `verify-pr-signatures.yml` are called that way by
-  all four. A merge here changes behaviour for every caller immediately,
-  with no version bump anywhere — the least-trusted boundary in the
-  dependency graph is also the least pinned one. This repo's own two
-  self-test callers (`security-scan-self.yml`,
-  `verify-pr-signatures-self.yml`) already use the strictest available
-  pin — local path, same commit — which is the pattern the four delivery
-  repos would need a tag or SHA pin to approach.
+- **The floating-reference finding is org-wide, not per-repo — resolved
+  2026-08-28.** Every delivery repo called this repo's reusable workflows
+  at `@main` (`security-scan.yml` and `verify-pr-signatures.yml` in all
+  four; `release-helm.yml` and `update-pages.yml` in `platform` and
+  `deployments`; `release-go.yml` in `platform` — 13 caller lines total).
+  A merge here changed behaviour for every caller immediately, with
+  no version bump anywhere — the least-trusted boundary in the dependency
+  graph was also the least pinned one.
 
-  **Resolved (JDWLABS-448, 2026-08-28):** SHA pinning, not tags. This repo
-  has no tagged releases and none are planned — a floating tag would carry
-  the same instant-propagation risk as `@main` with an extra layer of
-  indirection. Every delivery-repo caller now pins to a specific commit
-  SHA in this repo, with a dated `# main as of <date>` comment for
-  traceability, e.g.:
+  **Decision: pin to a full commit SHA, not a tag.** This repo has no
+  tagged releases (`git tag` is empty, no GitHub Releases), so a tag-pin
+  scheme would mean inventing a release process for a repo that has never
+  needed one just to have something to point at — a SHA pin needs nothing
+  new. Every caller line now reads
+  `uses: jdwlabs/.github/.github/workflows/<file>.yml@<full-sha>  # main as of YYYY-MM-DD (jdwlabs/.github has no tagged releases)`,
+  the comment recording the date the SHA was `main`'s tip, for a human
+  reading the pin without resolving it. If this repo ever starts tagging
+  releases, the comment convention becomes `# vX.Y.Z` and existing pins
+  should migrate opportunistically, not in a forced sweep.
 
-  ```yaml
-  uses: jdwlabs/.github/.github/workflows/security-scan.yml@b827924589b7e129a81762131b9d451121718bdc  # main as of 2026-08-26 (jdwlabs/.github has no tagged releases)
-  ```
+  **Update mechanism: Renovate, already wired.** `default.json`'s
+  `github-actions` manager (via `config:recommended`) tracks a full-SHA
+  `uses:` pin as a digest dependency and opens a PR when `main` moves;
+  `digest` is already in the `matchUpdateTypes` batched into the weekly
+  "all non-major dependencies" group in every delivery repo's Renovate
+  config (each `extends: ["github>jdwlabs/.github"]`). No new Renovate
+  config was needed — digest updates for these pins ride the same weekly
+  batch as every other pinned Action.
 
-  Renovate's `github-actions` manager matches `uses:` lines generically, so
-  it should pick up SHA-pinned reusable-workflow refs the same way it
-  already does SHA-pinned actions — not yet observed live (no drift has
-  occurred since the pin), so treat as expected-but-unverified until a real
-  Renovate PR against one of these refs is seen.
+  **Trade-off accepted.** A behaviour change to a reusable workflow no
+  longer reaches every caller the moment it merges to `main` here; it reaches
+  each caller only after that caller's next Renovate digest-bump PR is
+  reviewed and merged. For a single-maintainer org this trades instant
+  propagation for a review point on every behaviour change to the
+  least-trusted boundary in the dependency graph — the trade this document
+  already named as worth making. This repo's own two self-test callers
+  (`security-scan-self.yml`, `verify-pr-signatures-self.yml`) keep the
+  strictest available pin — local path, same commit — unaffected by this
+  change.
 - **Two GitHub-owned actions break house pinning convention.**
   `actions/upload-artifact@v7` (`.github/dependabot-alert-report.yml`) and
   `github/codeql-action/upload-sarif@v4` (`.github/security-scan.yml`) are

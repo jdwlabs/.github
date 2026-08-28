@@ -17,6 +17,14 @@ jobs:
 
 Callers must set the appropriate `permissions` and trigger — `push: tags` for the release workflows, `pull_request` for the gates. The reusable workflow inherits the calling repo's `GITHUB_TOKEN` automatically.
 
+**Pin to a commit SHA, not `@main`.** The examples below show `@main` for
+readability, but every real caller must pin `@<full-sha>` with a
+`# main as of YYYY-MM-DD` comment — see
+[`docs/ci-standards.md`](../../docs/ci-standards.md) §4 for the decision and
+why (this repo has no tagged releases, so a SHA pin is the immutable option
+rather than a version tag). Renovate opens a digest-bump PR when `main`
+moves; a caller does not need to watch this repo by hand.
+
 ---
 
 ## `release-go.yml` — Go Binary Release
