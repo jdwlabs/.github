@@ -1,0 +1,30 @@
+name: Tools Tests
+
+# tools/ holds scripts other repos vendor byte-for-byte (check-image-pins.py)
+# or run on a schedule with no pull_request signal of their own
+# (check-ruleset-conformance.py). This is the only gate a change to either
+# gets before it propagates, so it runs on every PR here.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: "3.x"
+      - name: Install dependencies
+        # Same pin as the delivery repos that vendor the checker, so a
+        # PyYAML behaviour change cannot pass here and fail there.
+        run: pip install PyYAML==6.0.3
+      - name: Unit-test the shared tools
+        run: python3 -m unittest discover -s tools/tests -t tools/tests -v
