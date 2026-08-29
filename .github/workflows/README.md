@@ -139,52 +139,6 @@ jobs:
 
 ---
 
-## `release-container.yml` — Container Image Release
-
-Builds a multi-arch container image, pushes to a registry, and creates a GitHub release with auto-generated changelog.
-
-**Trigger:** `push: tags: ['*-v[0-9]*', '*-[0-9]*']` (new and legacy formats during Nx migration)
-
-**Inputs:**
-
-| Input | Required | Default | Description |
-|---|---|---|---|
-| `component` | Yes | — | Component name matching the image name and Nx project |
-| `registry` | No | `ghcr.io` | Container registry hostname |
-| `image-repo` | Yes | — | Image repository path under the registry (e.g. `jdwlabs`) |
-| `dockerfile` | No | `Dockerfile` | Path to the Dockerfile |
-| `context` | No | `.` | Docker build context |
-| `platforms` | No | `linux/amd64,linux/arm64` | Target platforms |
-
-**Tag format:** `{component}-v{MAJOR}.{MINOR}.{PATCH}` (new) or `{component}-{MAJOR}.{MINOR}.{PATCH}` (legacy `@jscutlery/semver` — remove after Nx release migration).
-
-**Example caller:**
-
-```yaml
-# .github/workflows/release-usersui.yml
-name: Release usersui
-
-on:
-  push:
-    tags:
-      - 'usersui-v[0-9]*'
-
-permissions:
-  contents: write
-  packages: write
-
-jobs:
-  release:
-    uses: jdwlabs/.github/.github/workflows/release-container.yml@main
-    with:
-      component: usersui
-      image-repo: jdwlabs
-```
-
-**Used by:** `apps` (post Nx release migration)
-
----
-
 ## `security-scan.yml` — Security Scan (Trivy + SARIF, gitleaks and binary gates)
 
 Three jobs:

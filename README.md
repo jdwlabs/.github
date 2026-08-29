@@ -29,7 +29,6 @@ Full inputs, callers and behaviour: [`.github/workflows/README.md`](.github/work
 |---|---|---|
 | [`release-go.yml`](.github/workflows/release-go.yml) | Reusable | GoReleaser cross-compile and release on tag push |
 | [`release-helm.yml`](.github/workflows/release-helm.yml) | Reusable | Package a Helm chart, release it, update the gh-pages index |
-| [`release-container.yml`](.github/workflows/release-container.yml) | Reusable | Multi-arch image build, registry push, changelog release |
 | [`security-scan.yml`](.github/workflows/security-scan.yml) | Reusable | Trivy SARIF (advisory), gitleaks secrets gate and added-binary size gate (both blocking) |
 | [`verify-pr-signatures.yml`](.github/workflows/verify-pr-signatures.yml) | Reusable | Fails a pull request carrying any commit GitHub does not report as `verified` |
 | [`main-attribution.yml`](.github/workflows/main-attribution.yml) | Scheduled, local | Daily report of default-branch commits no merged pull request accounts for |
