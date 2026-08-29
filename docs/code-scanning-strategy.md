@@ -86,11 +86,16 @@ up after another tool. Nothing in the repository could touch the cache key.
 Advanced setup exposes the same switch as the `dependency-caching` input, off
 by default, so the write stops at its source. The workflow mirrors the
 default-setup configuration it replaces — languages, `default` query suite,
-`remote` threat model, weekly schedule, plus the code-quality analysis kind
-that default setup had been running as a second dynamic workflow — and keeps
-the `/language:<name>` category, so alerts share one analysis origin across
-the switch. Per-push runner cost is unchanged: the same four extractors run
-once each.
+`remote` threat model, weekly schedule — and keeps the `/language:<name>`
+category, so alerts share one analysis origin across the switch. Per-push
+runner cost is unchanged: the same four extractors run once each.
+
+Code quality is out of scope here and unchanged: it still runs on default
+setup as its own dynamic workflow, because `codeql-action` rejects the
+`analysis-kinds` input in checked-in workflows, and whether it stays on is a
+separate decision. It also runs a Java extractor, so if `codeql-dependencies-*`
+cache entries keep appearing after the switch, it is the remaining writer to
+look at.
 
 Alert continuity was the stated reason not to do this by default. Measured
 before the switch, it cost nothing: zero open CodeQL alerts (the two open
