@@ -15,8 +15,8 @@ snapshot, not a live view.
 
 ## 1. The estate
 
-39 workflow files across 5 repositories: `apps` (6), `deployments` (9),
-`infrastructure` (6), `platform` (8), `.github` (10, of which 5 are
+38 workflow files across 5 repositories: `apps` (6), `deployments` (9),
+`infrastructure` (6), `platform` (8), `.github` (9, of which 4 are
 `workflow_call`-only reusable workflows never run standalone here).
 
 The delivery-repo count has grown since the audit that opened this line of
@@ -94,7 +94,6 @@ that introduces it.
 |---|---|---|---|---|
 | `dependabot-alert-report.yml` | `schedule` weekly (Mon 13:00), `workflow_dispatch` | Cross-org open Dependabot alert count, diffed against the prior run, published to one pinned issue | Weekly; 2026-08-17 success | 08-08 |
 | `main-attribution.yml` | `schedule` daily (13:17), `workflow_dispatch` | Reports default-branch commits with no merged pull request behind them, across `deployments`/`platform`/`infrastructure`/`.github` | Daily; **2026-08-20 failed** — `platform` exceeded the 100-commit GraphQL page cap in-window, refused to report a partial pass | 08-03 |
-| `release-container.yml` | `workflow_call` | Reusable multi-arch image build/push + release | Not run standalone (expected). **No caller found** in any of the 4 delivery repos — currently unconsumed | 08-01 |
 | `release-go.yml` | `workflow_call` | Reusable GoReleaser release | Not run standalone (expected). Caller: `platform/release-platformctl.yml` | 08-01 |
 | `release-helm.yml` | `workflow_call` | Reusable Helm chart release + gh-pages index update | Not run standalone (expected). Callers: `platform/release.yml`, `deployments/release.yml` (both currently dead — see §3) | 08-01 |
 | `ruleset-reconcile.yml` | `schedule` daily (07:41), `workflow_dispatch` | Compares every repo's committed ruleset against `org-policy.json`; reports and fails, never applies | Daily; new this week, first run **failed with a real divergence** (correct behaviour) | 08-19 |
@@ -149,10 +148,10 @@ trailer the org's authorship contract requires.
 | `apps/deliver-backfill.yml` | **Keep** | `workflow_dispatch`-only by design, one historical run. It exists for exactly the failure mode it names — `ci.yml`'s release job tags successfully but a later step in the same run fails — and a near-zero run count is what a working emergency tool looks like, not evidence of neglect. |
 | `deployments/e2e.yml` | **Keep, currently dormant** | Manual-only because the self-hosted ARC runner it needs is down; the file's own header documents the `repository_dispatch` trigger that existed before and names it as the thing to restore once the runner is back. The recent run history (all `failure`, all `repository_dispatch`) predates the trigger's removal and is stale evidence, not current signal. |
 | `infrastructure/release.yml`, `platform/release-platformctl.yml` | **Keep** | Idle several weeks to a few months, but both are tag-triggered binary releases — idle is the expected state between releases, not a sign of drift. |
-| `.github/release-container.yml` | **Retire, or find the caller** | Reusable, `workflow_call`-only, and no caller was found in any of the four delivery repos as of this audit. Either something outside the four audited repos consumes it and that should be recorded here, or it is dead weight left over from before the org's container images moved to their current release path — worth a direct check before deletion, not a blind retire. |
+| `.github/release-container.yml` | **Retired (deleted)** | Reusable, `workflow_call`-only, and the direct check found no consumer: zero hits from GitHub code search across the org and from a clone-and-grep of every org repository (`apps`, `deployments`, `infrastructure`, `platform`, `.github-private`, `demo-repository`). The README's claimed consumer (`apps`, after the Nx release migration) never materialised — `apps/ci.yml` already runs `nx release` and builds and pushes images through each project's `build-image` target, so nothing plans to adopt it. |
 | `deployments/prd-drift.yml` | **Keep, needs a human look** | Doing its job by design (report, never promote) — but 5/5 recent daily runs are red, which is exactly the ambiguity `docs/repo-health-visibility.md` §3 already named: a job red by design and a job red because it broke look identical from outside. Worth confirming prd is actually behind rather than assuming the red is expected. |
 | `.github/main-attribution.yml` | **Keep** | The 2026-08-20 failure is the workflow refusing to report a partial pass when `platform` exceeded its 100-commit page cap in one window — correct behaviour under load, not a defect. Worth knowing a busy week can trip this, not worth changing. |
-| Everything else in the inventory (24 of 39 files) | **Keep, no verdict needed** | Fires on every PR or push, green on its last run, and gates or reports something with a live consumer. |
+| Everything else in the inventory (24 of 38 files) | **Keep, no verdict needed** | Fires on every PR or push, green on its last run, and gates or reports something with a live consumer. |
 
 ---
 
