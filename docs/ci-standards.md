@@ -102,6 +102,7 @@ that introduces it.
 | `security-scan.yml` | `workflow_call` | Reusable Trivy + gitleaks + binary-size scan | Not run standalone (expected). Callers: all 4 delivery repos + this repo's self-test | 08-01 |
 | `verify-pr-signatures-self.yml` | `pull_request` | Self-test caller of `verify-pr-signatures.yml` via local path | Every PR; 2026-08-21 success | 07-31 |
 | `verify-pr-signatures.yml` | `workflow_call` | Reusable commit-signature gate | Not run standalone (expected). Callers: all 4 delivery repos + this repo's self-test | 07-31 |
+| `tools-tests.yml` | `pull_request`, `push`(main) | Unit tests for `tools/` — the vendored `check-image-pins.py` and the scheduled ruleset checker, neither of which gets PR signal any other way | Every PR; new 2026-08-29 | 08-29 |
 
 ---
 
@@ -205,7 +206,31 @@ scan:
   pinned to a major version only, unlike every other action reference in
   scope, which carries a full `vMAJOR.MINOR.PATCH`.
 
-## 5. Review cadence
+## 5. Shared scripts vendored into delivery repos
+
+Some CI gates are Python scripts rather than reusable workflows, and a
+script cannot be `uses:`-referenced — it has to exist in the calling repo's
+checkout. The rule for those is the same as for reusable workflows, applied
+by hand:
+
+- **The canonical copy lives here, under `tools/`**, with its tests under
+  `tools/tests/` and `tools-tests.yml` gating every change to it.
+- **Each consuming repo vendors the script and its test file byte-for-byte**
+  and declares everything repo-specific (which paths are scanned, where the
+  allowlist lives) in a config file next to it — never by editing the script.
+- **The consuming repo's CI compares its copy against this repo at a pinned
+  commit SHA** (`raw.githubusercontent.com/jdwlabs/.github/<sha>/tools/…`,
+  with the same dated `# main as of <date>` comment) and fails on any
+  difference. A rule fix therefore lands here first, then each consumer
+  re-vendors and bumps its SHA in one PR; a consumer that skips that PR
+  keeps running the older rules, but its own CI says so on every run
+  rather than letting the two copies drift apart silently.
+
+| Script | Consumers | What the per-repo config declares |
+|---|---|---|
+| `tools/check-image-pins.py` | `deployments`, `platform` | `tools/image-pin-check.yaml`: scan sources (`helm-overlays` for a `charts/<chart>/values-<env>.yaml` layout, `tree` globs for everything else) and the allowlist path |
+
+## 6. Review cadence
 
 This document is a snapshot, not a subscription — nothing re-runs it
 automatically. The commitment: **re-run this audit (workflow inventory,
