@@ -18,6 +18,8 @@ Python, shell, Terraform, Helm, Kubernetes manifests, Dockerfiles).
   checked-in workflow. Covers TS/JS and Java (Kotlin/Spring Boot) well; Go
   support exists but is shallower; no coverage for
   Terraform/Helm/k8s/Dockerfiles/shell (not in CodeQL's scope).
+  *Since then:* moved to a checked-in advanced-setup workflow — see
+  "Decision: CodeQL advanced setup, not default setup" below.
 - **Dependabot** — described here as active on `apps` for version and security
   updates. *Since then:* version updates consolidated onto **Renovate** (a
   `renovate.json` per repo plus an org-level default). Dependabot vulnerability
@@ -65,6 +67,47 @@ load-bearing; only the automated fixes are redundant.
 Revisit if Renovate stops opening a fix pull request within a day of an alert
 appearing, or if Renovate is dropped as the update tool. Automated security
 fixes are a per-repository setting and reversible either way.
+
+### Decision: CodeQL advanced setup, not default setup
+
+Decided 2026-08-29, for `apps`. CodeQL runs from a checked-in
+`.github/workflows/codeql.yml` instead of GitHub's default setup, and the
+hourly `prune-actions-cache.yml` that default setup made necessary is deleted.
+
+Default setup enables dependency caching unconditionally on GitHub-hosted
+runners and writes each Java/Go dependency archive under a content-derived key
+that never repeats. Measured on 2026-08-29: 25 `codeql-*` entries holding
+3.88 GiB of a 5.83 GiB total cache, individual Java entries 252-303 MiB, three
+per open pull request even with hourly pruning. The prune workflow ran 447
+times in the preceding 28 days (112 runs/week, about 119 billed runner-minutes
+per week at one billed minute per ten-second run) and its only job was cleaning
+up after another tool. Nothing in the repository could touch the cache key.
+
+Advanced setup exposes the same switch as the `dependency-caching` input, off
+by default, so the write stops at its source. The workflow mirrors the
+default-setup configuration it replaces — languages, `default` query suite,
+`remote` threat model, weekly schedule, plus the code-quality analysis kind
+that default setup had been running as a second dynamic workflow — and keeps
+the `/language:<name>` category, so alerts share one analysis origin across
+the switch. Per-push runner cost is unchanged: the same four extractors run
+once each.
+
+Alert continuity was the stated reason not to do this by default. Measured
+before the switch, it cost nothing: zero open CodeQL alerts (the two open
+alerts were both Trivy), and the two closed CodeQL alerts stay in the closed
+list — a setup change does not delete history.
+
+What this trades away: GitHub no longer updates the configuration for us. The
+`codeql-action` pin is owned by Renovate like every other action in the org;
+a new language or a query-suite change is a pull request rather than a
+settings toggle. Revisit if default setup gains a way to disable dependency
+caching, at which point the workflow could go back to being GitHub-managed —
+though the reason to would be weak, since the checked-in file is also the
+only reviewable record of what is scanned.
+
+The other repositories are unaffected: CodeQL is still `apps`-only, and step 3
+of the rollout plan below should use this workflow shape rather than default
+setup so the same cache problem is not re-created there.
 
 ## Comparison matrix
 
