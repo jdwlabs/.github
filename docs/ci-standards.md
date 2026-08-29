@@ -182,6 +182,23 @@ scan:
   `verify-pr-signatures-self.yml`) already use the strictest available
   pin — local path, same commit — which is the pattern the four delivery
   repos would need a tag or SHA pin to approach.
+
+  **Resolved (JDWLABS-448, 2026-08-28):** SHA pinning, not tags. This repo
+  has no tagged releases and none are planned — a floating tag would carry
+  the same instant-propagation risk as `@main` with an extra layer of
+  indirection. Every delivery-repo caller now pins to a specific commit
+  SHA in this repo, with a dated `# main as of <date>` comment for
+  traceability, e.g.:
+
+  ```yaml
+  uses: jdwlabs/.github/.github/workflows/security-scan.yml@b827924589b7e129a81762131b9d451121718bdc  # main as of 2026-08-26 (jdwlabs/.github has no tagged releases)
+  ```
+
+  Renovate's `github-actions` manager matches `uses:` lines generically, so
+  it should pick up SHA-pinned reusable-workflow refs the same way it
+  already does SHA-pinned actions — not yet observed live (no drift has
+  occurred since the pin), so treat as expected-but-unverified until a real
+  Renovate PR against one of these refs is seen.
 - **Two GitHub-owned actions break house pinning convention.**
   `actions/upload-artifact@v7` (`.github/dependabot-alert-report.yml`) and
   `github/codeql-action/upload-sarif@v4` (`.github/security-scan.yml`) are
