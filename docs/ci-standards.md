@@ -31,8 +31,8 @@ reconcile back to.
 |---|---|---|---|---|
 | `agent-identity.yml` | `pull_request` | Fails a PR where the agent App identity appears without a `Co-Authored-By` trailer | Every PR; 2026-08-21 success | 08-19 |
 | `ci.yml` | `push`(main), `pull_request`, `workflow_dispatch` | Format, lint, test, sharded e2e, and on main-push: Nx release, image build/push, chart bump dispatch | Continuous, many/day; 2026-08-21 success | 08-19 |
+| `codeql.yml` | `push`(main), `pull_request`, `schedule` weekly (Mon 04:17), `workflow_dispatch` | Checked-in CodeQL advanced setup (actions, go, java-kotlin, javascript-typescript; code-scanning + code-quality kinds). Replaced default setup and the hourly `prune-actions-cache.yml` on 2026-08-29: default setup's dependency cache was the bloat the prune existed for, and advanced setup leaves it off | Continuous; new 2026-08-29 | 08-29 |
 | `deliver-backfill.yml` | `workflow_dispatch` only | Manual recovery: rebuild/republish images for tag/version pairs a prior release run failed to deliver | Emergency-only; 1 run ever, 2026-07-24 success | 08-17 |
-| `prune-actions-cache.yml` | `schedule` hourly (`:25`) | Evicts stale Actions cache entries (chiefly CodeQL's never-hit content-hash keys) before they evict caches CI depends on | Hourly; 2026-08-21 success | 08-01 |
 | `security-scan.yml` | `pull_request`, `push`(main, docs-excluded) | Caller into the org's reusable Trivy + gitleaks + binary-size scan | Continuous; 2026-08-21 success | 08-14 |
 | `verify-pr-signatures.yml` | `pull_request` | Caller into the org's reusable commit-signature gate | Every PR; 2026-08-21 success | 07-31 |
 
