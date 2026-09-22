@@ -24,6 +24,27 @@
       "groupName": "all non-major dependencies",
       "groupSlug": "all-minor-patch",
       "matchUpdateTypes": ["minor", "patch", "pin", "digest"]
+    },
+    {
+      "description": "GitHub Actions updates are committed as ci(deps), not chore(deps). The release tooling on these repositories cuts a patch for chore(deps) so dependency fixes reach production, but an Action bump changes only CI: as chore(deps) it would publish an image, recreate a pod or redeploy a site with nothing in it that changed.",
+      "matchManagers": ["github-actions"],
+      "semanticCommitType": "ci"
+    },
+    {
+      "description": "Non-major Action updates get a weekly group of their own. A group produces one commit, so mixing them with application dependencies would force a single commit type on both.",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "groupName": "github actions",
+      "groupSlug": "github-actions"
+    }
+  ],
+  "customManagers": [
+    {
+      "description": "Release tooling run as `npx -p <package>@<version>` inside workflows, which no built-in manager reads. Without this the pins would never move.",
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/workflows/[^/]+\\.ya?ml$/"],
+      "matchStrings": ["-p (?<depName>@?[a-z0-9][a-z0-9._/-]*)@(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
+      "datasourceTemplate": "npm"
     }
   ],
   "vulnerabilityAlerts": {
