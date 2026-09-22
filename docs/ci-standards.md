@@ -196,11 +196,11 @@ scan:
   **Update mechanism: Renovate, already wired.** `default.json`'s
   `github-actions` manager (via `config:recommended`) tracks a full-SHA
   `uses:` pin as a digest dependency and opens a PR when `main` moves;
-  `digest` is already in the `matchUpdateTypes` batched into the weekly
-  "all non-major dependencies" group in every delivery repo's Renovate
-  config (each `extends: ["github>jdwlabs/.github"]`). No new Renovate
-  config was needed — digest updates for these pins ride the same weekly
-  batch as every other pinned Action.
+  `digest` is in the `matchUpdateTypes` of the weekly "github actions"
+  group that `default.json` gives every repo extending
+  `github>jdwlabs/.github`, committed as `ci(deps)` so an Action bump never
+  cuts a release. No per-repo Renovate config is needed — digest updates for
+  these pins ride the same weekly batch as every other pinned Action.
 
   **Trade-off accepted.** A behaviour change to a reusable workflow no
   longer reaches every caller the moment it merges to `main` here; it reaches
