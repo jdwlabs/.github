@@ -1,0 +1,22 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": [
+    "Opt-in auto-merge preset, extended as github>jdwlabs/.github:automerge alongside the default preset.",
+    "It is deliberately not part of default.json. In a GitOps repository merging is deploying, and a blanket rule would reach every image and chart that repository does not explicitly exclude -- an unattended pod recreation is what cost world data on 2026-08-30. Repositories where a merge only changes their own build opt in; deployment repositories keep writing their own narrow rules.",
+    "Merging is armed through GitHub's native auto-merge (platformAutomerge), so a PR still has to pass every required check before it lands; a red build simply stays open. The repository must have allow_auto_merge enabled or nothing ever arms, silently."
+  ],
+  "platformAutomerge": true,
+  "packageRules": [
+    {
+      "description": "Non-major updates, including the weekly grouped PR and any security fix of that size.",
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "automerge": true
+    },
+    {
+      "description": "Majors to development dependencies. They cannot reach a user: the blast radius is this repository's own build, which is exactly what the required checks exercise. A dev major that breaks something fails those checks and stays open for a human. Runtime majors are where a dependency may break its contract with callers, so they always wait for review.",
+      "matchDepTypes": ["devDependencies"],
+      "matchUpdateTypes": ["major"],
+      "automerge": true
+    }
+  ]
+}

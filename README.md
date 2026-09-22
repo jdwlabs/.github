@@ -47,6 +47,7 @@ The three scheduled workflows run here and only here — they read other reposit
 | [`.github/rulesets/org-policy.json`](.github/rulesets/org-policy.json) | The contract every repo's Baseline ruleset must satisfy, and the declared exceptions to it |
 | [`.github/CODEOWNERS`](.github/CODEOWNERS) | Review routing; the reusable workflows and `gitleaks.toml` require owner review because every repo consumes them |
 | [`default.json`](default.json) | Org-wide Renovate preset, extended by the other repos as `github>jdwlabs/.github` |
+| [`automerge.json`](automerge.json) | Opt-in Renovate auto-merge (non-major, plus dev-dependency majors), extended as `github>jdwlabs/.github:automerge` by repos where a merge does not deploy infrastructure |
 | [`renovate.json`](renovate.json) | This repo's own Renovate config — action pins for the reusable workflows |
 | [`gitleaks.toml`](gitleaks.toml) | Org-wide gitleaks config and allowlist read by every caller of `security-scan.yml` |
 
