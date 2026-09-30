@@ -46,7 +46,26 @@ chore/upgrade-nx-20
 - Keep PRs focused — one concern per PR
 - Link the relevant issue if one exists
 - Ensure CI passes before requesting review
-- Use the PR template and fill it out completely
+- Use the PR template, but keep only the sections that have content — about
+  150 words, written for the reviewer. No file-by-file list or restated diff
+- Merges are **rebase** merges (squash and merge commits are disabled), so
+  every commit reaches `main` as written: tidy the branch into commits that
+  each stand alone before asking for review
+
+## AI-Assisted Commits
+
+A commit made with an AI coding agent names the exact agent and model that
+ran, in two trailers — the model actually used, never a copied example:
+
+```
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Assisted-by: Claude Code:claude-opus-5-5
+```
+
+(Codex: `Co-Authored-By: Codex <codex@openai.com>` and
+`Assisted-by: Codex:<model-id>`.) Attribution lives in commits only: no
+"Generated with" footer, robot emoji or attribution line in PR titles, bodies
+or comments.
 
 ## Code Style
 
