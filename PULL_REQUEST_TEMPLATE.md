@@ -1,32 +1,24 @@
-## Summary
+<!--
+Write for the reviewer: about 150 words, and keep only the sections that have
+content. No file-by-file list, restated diff, pasted prompt, logs, unticked
+checkboxes, or "Generated with" / attribution footer. Every claim must match
+the final diff. Title: `type(scope): description`, under 70 characters.
+-->
 
-<!-- What does this PR do and why? -->
+## Why
 
-## Type of Change
+<!-- 1–3 sentences: the problem, and why this approach. -->
 
-- [ ] `feat` — new feature
-- [ ] `fix` — bug fix
-- [ ] `chore` — maintenance / deps / tooling
-- [ ] `docs` — documentation only
-- [ ] `refactor` — no feature or fix
-- [ ] `test` — tests only
-- [ ] `ci` — CI/CD pipeline
-- [ ] `perf` — performance improvement
+## Needs attention
 
-## Test Plan
+<!-- - `path:line` — the risky or non-obvious spot, and the feedback you want. -->
 
-<!-- How was this tested? What should a reviewer check? -->
+## Risk / rollout
 
-- [ ] Unit tests pass
-- [ ] Linting passes
-- [ ] Manually tested (describe below)
+<!-- Only if any: migrations, breaking changes, manual steps. Otherwise delete. -->
 
-## Related Issues
+## Verified
 
-<!-- Closes #123 -->
+<!-- - `command actually run` — result. Evidence, not intention. -->
 
-## Checklist
-
-- [ ] Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/)
-- [ ] CI passes
-- [ ] No sensitive data, secrets, or credentials included
+<!-- Closes #123 / KEY-123 -->
