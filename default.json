@@ -50,7 +50,7 @@
       "enabled": false
     },
     {
-      "description": "pnpm refuses to install a package published in the last 24 hours, so an update proposed sooner fails its own install step and never merges. Waiting a day here keeps Renovate from opening a pull request that cannot pass. Limited to the npm registry because the rule holds back any update whose source reports no publish time, which would stall chart and image updates indefinitely. Vulnerability fixes are exempt by Renovate's design and still open immediately.",
+      "description": "pnpm refuses to install a package published in the last 24 hours, so an update proposed sooner fails its own install step and never merges. Waiting a day here keeps Renovate from proposing a version that cannot pass. It covers version updates only: Renovate does not apply a release age to lock file maintenance, where the versions are chosen by the package manager's own resolution and so by its own policy. Limited to the npm registry because the rule holds back any update whose source reports no publish time, which would stall chart and image updates indefinitely. Vulnerability fixes are exempt by Renovate's design and still open immediately.",
       "matchDatasources": ["npm"],
       "minimumReleaseAge": "1 day"
     }
