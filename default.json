@@ -4,6 +4,7 @@
     "Shared Renovate preset for all jdwlabs repositories — consumed as github>jdwlabs/.github.",
     "Renovate is the single owner of dependency automation in this org; repository-level (UI) Dependabot should remain disabled so updates arrive through one reviewable pipeline.",
     "Regular updates are batched weekly (non-major updates grouped into one PR per repo) to keep review load low; security/vulnerability fixes bypass the schedule and open immediately.",
+    "Lock files for JavaScript package managers are re-resolved in that same weekly window. A vulnerability fix only opens a PR for a dependency a manifest names, so a patched transitive package that its parent's range already accepts would otherwise stay stale until someone regenerated the lock file by hand.",
     "Branches are kept rebased on the base branch so PRs stay fast-forward-clean for rebase-only merging."
   ],
   "extends": [
@@ -18,6 +19,10 @@
   "rebaseWhen": "behind-base-branch",
   "dependencyDashboard": true,
   "configMigration": true,
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 8am on saturday"]
+  },
   "packageRules": [
     {
       "description": "Batch all non-major updates into a single weekly PR per repo to keep noise reviewable",
@@ -36,6 +41,12 @@
       "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
       "groupName": "github actions",
       "groupSlug": "github-actions"
+    },
+    {
+      "description": "Lock file maintenance is limited to the npm manager, which also covers pnpm and Yarn. Re-resolving a Chart.lock or a Terraform provider lock changes what a GitOps repository deploys, and that should arrive as a named version bump someone chose, not as a side effect of a weekly refresh.",
+      "matchUpdateTypes": ["lockFileMaintenance"],
+      "matchManagers": ["!npm"],
+      "enabled": false
     }
   ],
   "customManagers": [
