@@ -13,6 +13,11 @@
       "automerge": true
     },
     {
+      "description": "Lock file maintenance. It moves packages only within ranges the manifests already accept, so it is narrower than the non-major updates above, and it is how transitive security fixes arrive: waiting on a person would leave those open for as long as the pull request sits.",
+      "matchUpdateTypes": ["lockFileMaintenance"],
+      "automerge": true
+    },
+    {
       "description": "Majors to development dependencies. They cannot reach a user: the blast radius is this repository's own build, which is exactly what the required checks exercise. A dev major that breaks something fails those checks and stays open for a human. Runtime majors are where a dependency may break its contract with callers, so they always wait for review.",
       "matchDepTypes": ["devDependencies"],
       "matchUpdateTypes": ["major"],
