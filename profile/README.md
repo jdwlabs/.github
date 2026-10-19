@@ -1,6 +1,6 @@
 # jdwlabs
 
-Self-hosted platform engineering lab: production K8s infrastructure, real app workloads, and a living portfolio of GitOps & full-stack practices.
+Self-hosted platform engineering lab: Kubernetes infrastructure, a GitOps platform, and the applications that run on it.
 
 ![Kubernetes](https://img.shields.io/badge/Kubernetes-326CE5?logo=kubernetes&logoColor=white)
 ![ArgoCD](https://img.shields.io/badge/ArgoCD-EF7B4D?logo=argo&logoColor=white)
@@ -16,11 +16,11 @@ Self-hosted platform engineering lab: production K8s infrastructure, real app wo
 
 ## Mission
 
-This isn't a tutorial cluster — it's a real platform run to the standard a paying customer's workloads would need: bare-metal provisioning, GitOps delivery, and application services, built and operated with the same rigor as a production shop. The goal is a working system, not a diagram of one.
+The lab is run to the standard a paying customer's workloads would need: bare-metal provisioning, GitOps delivery, and application services, built and operated with the same rigor as a production shop.
 
 **What "done" means here:**
 
-- Every change ships through a reviewed, green-CI pull request — no direct pushes to `main`.
+- Every change ships through a reviewed, green-CI pull request. Nothing is pushed directly to `main`.
 - A GitOps change isn't done at green CI; it's done when ArgoCD reports the workload **Synced + Healthy** against the live cluster.
 - Docs are code: paths and structure claimed in a README must resolve in the repo, or it's a bug, not a typo to shrug off.
 
@@ -47,9 +47,11 @@ flowchart TD
 | Repo | Description |
 |------|-------------|
 | [infrastructure](https://github.com/jdwlabs/infrastructure) | Talos Kubernetes cluster provisioning on Proxmox via Terraform and the `talops` CLI |
-| [platform](https://github.com/jdwlabs/platform) | Tenant-centric GitOps platform — ArgoCD, Vault, cert-manager, ESO, and CNPG |
+| [platform](https://github.com/jdwlabs/platform) | Tenant-centric GitOps platform: ArgoCD, Vault, cert-manager, ESO, and CNPG |
 | [deployments](https://github.com/jdwlabs/deployments) | Helm charts and ArgoCD ApplicationSet configs for the jdwlabs tenant |
-| [apps](https://github.com/jdwlabs/apps) | Multi-language Nx monorepo — Angular frontends, Go services, Java Spring Boot backends |
+| [apps](https://github.com/jdwlabs/apps) | Multi-language Nx monorepo: Angular frontends, Go services, Java Spring Boot backends |
+
+The apps repo also holds the [AI SRE relay](https://github.com/jdwlabs/apps/tree/main/apps/backend/ai-sre-relay), a Go service that runs an LLM investigation on each Alertmanager alert and tracks the alert as a ticket until it resolves.
 
 ---
 
