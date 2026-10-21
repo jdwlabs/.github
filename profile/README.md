@@ -28,28 +28,32 @@ The [org-wide code standards](https://github.com/jdwlabs/.github/blob/main/docs/
 
 ---
 
-## The Stack
+## Layers
+
+The lab is split into four layers. Each has one job, and a layer can change without the layers above it noticing.
 
 ```mermaid
 flowchart TD
-    infra["<b>infrastructure</b>\nTalos · Proxmox · Terraform · talops"]
-    platform["<b>platform</b>\nArgoCD · Vault · cert-manager · ESO · CNPG"]
-    deployments["<b>deployments</b>\nHelm charts · ArgoCD ApplicationSet"]
-    apps["<b>apps</b>\nAngular · Go · Java · Nx monorepo"]
+    subgraph tenants["Per tenant: jdwlabs · jdwillmsen · dotablaze-tech"]
+        apps["<b>Applications</b>\nthe software being built"]
+        delivery["<b>Delivery</b>\neach tenant's GitOps desired state"]
+    end
+    platform["<b>Platform</b>\nsecurity baseline every tenant inherits, plus shared services"]
+    infra["<b>Infrastructure</b>\ncontrol plane that provisions compute and clusters on any hardware"]
 
-    infra -->|"provisions cluster"| platform
-    platform -->|"manages tenant namespaces"| deployments
-    deployments -->|"deploys workloads from"| apps
+    apps -->|"images"| delivery
+    delivery -->|"runs on"| platform
+    platform -->|"runs on"| infra
 ```
 
-## Repositories
+| Layer | Job | Repo |
+|-------|-----|------|
+| Infrastructure | The lab's own cloud provider: provisions compute and clusters on whatever hardware is underneath | [infrastructure](https://github.com/jdwlabs/infrastructure) |
+| Platform | The managed layer, comparable to a managed Kubernetes service: a security baseline every tenant inherits (scoped access, pod security, network policy, quotas) plus shared services such as databases, storage, certificates, secrets, monitoring and alerting | [platform](https://github.com/jdwlabs/platform) |
+| Delivery | What a tenant runs, declared in Git and kept apart from application code | [deployments](https://github.com/jdwlabs/deployments) for the jdwlabs tenant |
+| Applications | The software being built; it produces images and never deploys itself | [apps](https://github.com/jdwlabs/apps) for the jdwlabs tenant |
 
-| Repo | Description |
-|------|-------------|
-| [infrastructure](https://github.com/jdwlabs/infrastructure) | Talos Kubernetes cluster provisioning on Proxmox via Terraform and the `talops` CLI |
-| [platform](https://github.com/jdwlabs/platform) | Tenant-centric GitOps platform: ArgoCD, Vault, cert-manager, ESO, and CNPG |
-| [deployments](https://github.com/jdwlabs/deployments) | Helm charts and ArgoCD ApplicationSet configs for the jdwlabs tenant |
-| [apps](https://github.com/jdwlabs/apps) | Multi-language Nx monorepo: Angular frontends, Go services, Java Spring Boot backends |
+The platform hosts other tenants alongside jdwlabs, each with its own delivery and application repos: [jdwillmsen](https://github.com/jdwillmsen) and [dotablaze-tech](https://github.com/dotablaze-tech).
 
 The apps repo also holds the [AI SRE relay](https://github.com/jdwlabs/apps/tree/main/apps/backend/ai-sre-relay), a Go service that runs an LLM investigation on each Alertmanager alert and tracks the alert as a ticket until it resolves.
 
